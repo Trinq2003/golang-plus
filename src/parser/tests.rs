@@ -52,6 +52,38 @@ fn run() {
 }
 
 #[test]
+fn parses_switch_cases_as_structured_blocks() {
+    let src = r#"
+package main
+
+import "fmt"
+
+fn run(n: int) {
+    switch n {
+    case 1:
+        fmt.Println("one")
+    default:
+        fmt.Println("other")
+    }
+}
+"#;
+    let program = parse_program(src).expect("parse should succeed");
+    let fn_decl = match &program.items[0] {
+        Item::Function(it) => it,
+        _ => panic!("expected function"),
+    };
+    let switch = match &fn_decl.body.stmts[0] {
+        Stmt::Switch(it) => it,
+        other => panic!("expected structured switch, got {other:?}"),
+    };
+    assert_eq!(switch.header, "n");
+    assert_eq!(switch.cases.len(), 2);
+    assert_eq!(switch.cases[0].label, "case 1:");
+    assert_eq!(switch.cases[1].label, "default:");
+    assert!(matches!(switch.cases[0].body.stmts[0], Stmt::Expr(_)));
+}
+
+#[test]
 fn parse_match_arm_patterns() {
     let src = r#"
 package main

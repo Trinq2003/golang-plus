@@ -159,7 +159,7 @@ pub enum Stmt {
     Match(MatchStmt),
     If(IfStmt),
     For(ForStmt),
-    Switch(RawStmt),
+    Switch(SwitchStmt),
     Select(RawStmt),
     Raw(RawStmt),
 }
@@ -171,6 +171,27 @@ pub struct ForStmt {
     /// Text between `for` and the body `{` (empty for `for { ... }`).
     pub header: String,
     pub header_span: Span,
+    pub body: Block,
+    pub span: Span,
+}
+
+/// A `switch` with a raw header (kept as text, e.g. `x`, empty, `v := x.(type)`)
+/// and structured `case`/`default` clauses so nested statements are analyzed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SwitchStmt {
+    /// Text between `switch` and the body `{` (empty for `switch { ... }`).
+    pub header: String,
+    pub header_span: Span,
+    pub cases: Vec<SwitchCase>,
+    pub span: Span,
+}
+
+/// One `case ...:` / `default:` clause of a `switch`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SwitchCase {
+    /// The clause label including the trailing colon, e.g. `case 2:` / `default:`.
+    pub label: String,
+    pub label_span: Span,
     pub body: Block,
     pub span: Span,
 }
