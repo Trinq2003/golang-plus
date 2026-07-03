@@ -291,7 +291,13 @@ pub(super) fn analyze_block(
                     analyze_block(&mut case.body, ret_type, enums, diagnostics, &mut case_vars);
                 }
             }
-            Stmt::Defer(_) | Stmt::Go(_) | Stmt::Select(_) | Stmt::Raw(_) => {}
+            Stmt::Select(select_stmt) => {
+                for case in &mut select_stmt.cases {
+                    let mut case_vars = vars.clone();
+                    analyze_block(&mut case.body, ret_type, enums, diagnostics, &mut case_vars);
+                }
+            }
+            Stmt::Defer(_) | Stmt::Go(_) | Stmt::Raw(_) => {}
         }
     }
 }

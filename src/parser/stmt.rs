@@ -46,7 +46,7 @@ impl<'a> Parser<'a> {
             return self.parse_switch_stmt();
         }
         if self.at(TokenKind::Select) {
-            return self.parse_raw_stmt().map(Stmt::Select);
+            return self.parse_select_stmt();
         }
         if self.at(TokenKind::Defer) {
             return self.parse_raw_line_stmt().map(Stmt::Defer);
@@ -307,25 +307,65 @@ impl<'a> Parser<'a> {
 
         self.idx = brace_idx;
         self.expect(TokenKind::LBrace, "expected `{` to start switch body");
-        self.skip_separators();
+        let Some(cases) = self.parse_case_clauses() else {
+            self.idx = saved;
+            return self.parse_raw_stmt().map(Stmt::Raw);
+        };
 
+        let rb = self.expect_token(TokenKind::RBrace, "expected `}` to end switch body");
+        let end = rb.map(|t| t.span.end).unwrap_or(start);
+        Some(Stmt::Switch(SwitchStmt {
+            header,
+            header_span,
+            cases,
+            span: start..end,
+        }))
+    }
+
+    /// Parse a `select` with structured comm-clause cases. `select` has no
+    /// header. Falls back to a raw statement on any unexpected shape.
+    pub(super) fn parse_select_stmt(&mut self) -> Option<Stmt> {
+        let saved = self.idx;
+        let start = self
+            .expect_token(TokenKind::Select, "expected `select`")?
+            .span
+            .start;
+
+        let Some(brace_idx) = self.find_body_brace(self.idx) else {
+            self.idx = saved;
+            return self.parse_raw_stmt().map(Stmt::Raw);
+        };
+        self.idx = brace_idx;
+        self.expect(TokenKind::LBrace, "expected `{` to start select body");
+        let Some(cases) = self.parse_case_clauses() else {
+            self.idx = saved;
+            return self.parse_raw_stmt().map(Stmt::Raw);
+        };
+
+        let rb = self.expect_token(TokenKind::RBrace, "expected `}` to end select body");
+        let end = rb.map(|t| t.span.end).unwrap_or(start);
+        Some(Stmt::Select(SelectStmt {
+            cases,
+            span: start..end,
+        }))
+    }
+
+    /// Parse `case ...:` / `default:` clauses (shared by `switch` and `select`),
+    /// positioned just after the opening `{`. Returns `None` on a malformed
+    /// clause so the caller can fall back to a raw statement.
+    fn parse_case_clauses(&mut self) -> Option<Vec<SwitchCase>> {
+        self.skip_separators();
         let mut cases = Vec::new();
         while !self.at(TokenKind::RBrace) && !self.is_eof() {
             if !self.at_case_or_default() {
-                // Unexpected token where a clause was expected: bail to raw.
-                self.idx = saved;
-                return self.parse_raw_stmt().map(Stmt::Raw);
+                return None;
             }
             let case_start = self.tokens[self.idx].span.start;
-            let Some(colon_idx) = self.find_clause_colon(self.idx) else {
-                self.idx = saved;
-                return self.parse_raw_stmt().map(Stmt::Raw);
-            };
+            let colon_idx = self.find_clause_colon(self.idx)?;
             let label_end = self.tokens[colon_idx].span.end;
             let label = self.source[case_start..label_end].trim().to_string();
             let label_span = case_start..label_end;
             self.idx = colon_idx + 1;
-            self.skip_separators();
 
             let body = self.parse_case_body();
             let case_end = body.span.end.max(label_end);
@@ -337,15 +377,7 @@ impl<'a> Parser<'a> {
             });
             self.skip_separators();
         }
-
-        let rb = self.expect_token(TokenKind::RBrace, "expected `}` to end switch body");
-        let end = rb.map(|t| t.span.end).unwrap_or(start);
-        Some(Stmt::Switch(SwitchStmt {
-            header,
-            header_span,
-            cases,
-            span: start..end,
-        }))
+        Some(cases)
     }
 
     /// Parse the statements of one `case`/`default` clause, stopping at the next

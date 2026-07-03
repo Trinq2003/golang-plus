@@ -272,7 +272,21 @@ impl<'a> SourceMapBuilder<'a> {
                 }
                 next
             }
-            Stmt::Select(raw) => self.map_raw_stmt(source, raw, "select", cursor),
+            Stmt::Select(select_stmt) => {
+                let next = self.map_named_from(
+                    source,
+                    select_stmt.span.clone(),
+                    "statement",
+                    "select",
+                    "select",
+                    cursor,
+                );
+                let inner = next.unwrap_or(cursor);
+                for case in &select_stmt.cases {
+                    self.map_block(source, &case.body, inner);
+                }
+                next
+            }
             Stmt::Raw(raw) => self.map_raw_stmt(source, raw, "raw", cursor),
         }
     }
