@@ -75,7 +75,7 @@ structured control flow, and test coverage.
 | Lint CI gate | Planned | Run `goplus lint` in CI once the example suite is warning-clean (a hard gate today would fail on pre-existing warnings). |
 | IDE diagnostics | Done | JSON diagnostics carry severity (`Error`/`Warning`/`Info`), codes, caret spans, and hints via `goplus check --diagnostic-format json`. |
 | Source navigation | Done | `goplus navigate` and emitted source maps resolve `.gp`↔`.go` in both directions. |
-| Built-in derives (`String`, `Debug`, `Equal`, JSON) | Done | All five (`String`, `Debug`, `Equal`, `JsonMarshal`, `JsonUnmarshal`) are generated for structs and enums, including tagged enums. |
+| Built-in derives (`String`, `Debug`, `Equal`, JSON) | Done | All five (`String`, `Debug`, `Equal`, `JsonMarshal`, `JsonUnmarshal`) are generated for structs and enums (incl. tagged enums). JSON honors explicit `` `json:"..."` `` field tags; enum JSON uses `fmt.Errorf` (both fixed by the case study). |
 | Richer derives (`Clone`, `Ord`, `Hash`) | Partial | `@derive(Clone)` deep-copies slice/map fields on structs (avoiding Go's silent shared-reference copy) and value-copies enums. `Ord`/`Hash` are not implemented yet. |
 | User-defined derives | Planned | Analogous to user-defined decorators; no mechanism today. |
 | Decorator signature validation (functions) | Partial | Local top-level decorators get `next`-param-count + return-shape checks (heuristic, string-based), beyond basic arity. Package-qualified (`pkg.dec`) decorators are skipped. |
@@ -118,6 +118,7 @@ broad benchmarking.
 | Task | Status | Acceptance Criteria |
 | --- | --- | --- |
 | Single-source status (this file) | Done | README/docs link here instead of restating status. |
+| REST API case study | Done | `examples/rest-api-demo/` is a task-tracker REST service written entirely in `.gp` (HTTP + service + store + enum state machine + JSON), run in CI via `goplus test`. Building it surfaced and fixed two JSON-derive codegen bugs. |
 | Docs site (mdBook + GitHub Pages) | Planned | Published at `https://trinq2003.github.io/golang-plus/`, built in CI on merge to `main`. |
 | Doc-consistency CI check | Planned | CI fails if README restates a status that contradicts this table. |
 

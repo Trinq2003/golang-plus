@@ -45,6 +45,48 @@ struct Bag {
 }
 
 #[test]
+fn enum_json_derive_uses_fmt_errorf() {
+    // Regression: the enum JSON derive used `json.Errorf`, which does not exist.
+    let src = r#"
+package main
+
+@derive(String, JsonMarshal, JsonUnmarshal)
+enum Color {
+    Red
+    Green
+}
+"#;
+    let mut program = parse_program(src).expect("parse ok");
+    let model = analyze(&mut program).expect("sema ok");
+    let go = generate_go(&program, &model);
+    assert!(go.contains("fmt.Errorf"), "{go}");
+    assert!(!go.contains("json.Errorf"), "{go}");
+}
+
+#[test]
+fn struct_json_derive_honors_explicit_tags() {
+    // Regression: the JSON derive ignored explicit tags and mangled `ID` to `i_d`.
+    let src = r#"
+package main
+
+@derive(JsonMarshal)
+struct T {
+    ID: int `json:"id"`
+    Name: string
+}
+"#;
+    let mut program = parse_program(src).expect("parse ok");
+    let model = analyze(&mut program).expect("sema ok");
+    let go = generate_go(&program, &model);
+    assert!(
+        go.contains("`json:\"id\"`"),
+        "explicit tag not honored:\n{go}"
+    );
+    assert!(!go.contains("i_d"), "acronym mangled:\n{go}");
+    assert!(go.contains("`json:\"name\"`"), "untagged field:\n{go}");
+}
+
+#[test]
 fn retry_without_backoff_does_not_import_time() {
     let src = r#"
 package main

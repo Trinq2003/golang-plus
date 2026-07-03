@@ -258,14 +258,12 @@ impl<'a> GoGenerator<'a> {
             fields = decl
                 .fields
                 .iter()
-                .map(|f| {
-                    format!(
-                        "\t\t{} {} `json:\"{}\"`",
-                        f.name,
-                        render_type_ref(&f.ty),
-                        to_json_key(&f.name)
-                    )
-                })
+                .map(|f| format!(
+                    "\t\t{} {} {}",
+                    f.name,
+                    render_type_ref(&f.ty),
+                    json_field_tag(f)
+                ))
                 .collect::<Vec<_>>()
                 .join("\n"),
             inits = decl
@@ -287,10 +285,10 @@ impl<'a> GoGenerator<'a> {
         out.push_str("\tvar raw struct {\n");
         for field in &decl.fields {
             out.push_str(&format!(
-                "\t\t{} {} `json:\"{}\"`\n",
+                "\t\t{} {} {}\n",
                 field.name,
                 render_type_ref(&field.ty),
-                to_json_key(&field.name)
+                json_field_tag(field)
             ));
         }
         out.push_str("\t}\n");
@@ -340,9 +338,10 @@ impl<'a> GoGenerator<'a> {
                     ));
                 }
             }
+            let fmt_name = self.import_binding("fmt", "fmt");
             out.push_str(&format!(
                 "\tdefault:\n\t\treturn nil, {}.Errorf(\"unknown {} tag: %d\", e.tag)\n\t}}\n}}",
-                json_name, decl.name
+                fmt_name, decl.name
             ));
             out
         } else {
@@ -356,6 +355,8 @@ impl<'a> GoGenerator<'a> {
 
     fn emit_enum_json_unmarshal(&mut self, decl: &EnumDecl) -> String {
         let json_name = self.import_binding("encoding/json", "json");
+        // Both branches emit an error in their `default:`; `Errorf` lives in fmt.
+        let fmt_name = self.import_binding("fmt", "fmt");
         if decl.is_tagged() {
             let mut out = String::new();
             out.push_str(&format!(
@@ -378,7 +379,7 @@ impl<'a> GoGenerator<'a> {
             }
             out.push_str(&format!(
                 "\tdefault:\n\t\treturn {}.Errorf(\"unknown {} type: %v\", raw[\"type\"])\n\t}}\n",
-                json_name, decl.name
+                fmt_name, decl.name
             ));
             out.push_str("\treturn nil\n}");
             out
@@ -402,11 +403,21 @@ impl<'a> GoGenerator<'a> {
             }
             out.push_str(&format!(
                 "\tdefault:\n\t\treturn {}.Errorf(\"unknown {} value: %s\", s)\n\t}}\n",
-                json_name, decl.name
+                fmt_name, decl.name
             ));
             out.push_str("\treturn nil\n}");
             out
         }
+    }
+}
+
+/// The struct tag to use for a field in a JSON derive: the field's explicit tag
+/// verbatim if it has one (so `json:"id"`, `omitempty`, etc. are honored), else a
+/// generated `json:"<snake_case>"`.
+fn json_field_tag(field: &FieldDecl) -> String {
+    match &field.tag {
+        Some(tag) => tag.clone(),
+        None => format!("`json:\"{}\"`", to_json_key(&field.name)),
     }
 }
 
