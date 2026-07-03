@@ -27,6 +27,31 @@ fn load(path: string) -> string! {
 }
 
 #[test]
+fn parses_for_body_as_structured_block() {
+    let src = r#"
+package main
+
+fn run() {
+    for i < 3 {
+        x := 1
+        i += 1
+    }
+}
+"#;
+    let program = parse_program(src).expect("parse should succeed");
+    let fn_decl = match &program.items[0] {
+        Item::Function(it) => it,
+        _ => panic!("expected function"),
+    };
+    let for_stmt = match &fn_decl.body.stmts[0] {
+        Stmt::For(it) => it,
+        other => panic!("expected structured for, got {other:?}"),
+    };
+    assert_eq!(for_stmt.header, "i < 3");
+    assert!(matches!(for_stmt.body.stmts[0], Stmt::VarDecl(_)));
+}
+
+#[test]
 fn parse_match_arm_patterns() {
     let src = r#"
 package main

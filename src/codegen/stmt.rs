@@ -27,14 +27,31 @@ impl<'a> GoGenerator<'a> {
             Stmt::Return(ret_stmt) => self.emit_return(ret_stmt, ret_type, indent),
             Stmt::Defer(raw)
             | Stmt::Go(raw)
-            | Stmt::For(raw)
             | Stmt::Switch(raw)
             | Stmt::Select(raw)
             | Stmt::Raw(raw) => format!("{}{}\n", tabs(indent), self.transform_expr(&raw.text)),
+            Stmt::For(for_stmt) => self.emit_for(for_stmt, ret_type, indent),
             Stmt::Expr(expr_stmt) => self.emit_expr_stmt(expr_stmt, ret_type, indent),
             Stmt::Match(match_stmt) => self.emit_match_stmt(match_stmt, ret_type, indent),
             Stmt::If(if_stmt) => self.emit_if_stmt(if_stmt, ret_type, indent),
         }
+    }
+
+    pub(super) fn emit_for(
+        &mut self,
+        for_stmt: &ForStmt,
+        ret_type: &ReturnType,
+        indent: usize,
+    ) -> String {
+        let header = self.transform_expr(&for_stmt.header);
+        let mut out = if header.trim().is_empty() {
+            format!("{}for {{\n", tabs(indent))
+        } else {
+            format!("{}for {} {{\n", tabs(indent), header)
+        };
+        out.push_str(&self.emit_block(&for_stmt.body, ret_type, indent + 1));
+        out.push_str(&format!("{}}}\n", tabs(indent)));
+        out
     }
 
     pub(super) fn emit_var_decl(
