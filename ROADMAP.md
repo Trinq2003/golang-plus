@@ -35,7 +35,7 @@ be safely reattached (so it can never silently delete one).
 | Semantic checks | Done | Duplicate declarations, enum variant/name collisions, generated-name collisions, match arity/duplicates, and decorator checks — but only outside raw statement bodies. |
 | Source maps + navigation | Done | `--emit-source-map` writes JSON `.gp`↔`.go` ranges; `goplus navigate` resolves both directions. |
 | Formatter | Done | `fmt --check`, in-place `fmt`, and `fmt --stdout` rebuild from the AST and **reattach comments**. In-place `fmt` overwrites only when every comment is preserved (multiset check), else it refuses. Round-trip/idempotency + comment-preservation are tested over all examples. |
-| Linter | Done | `goplus lint` ships 6 rules with stable codes; runs on the analyzed AST without generating Go. |
+| Linter | Done | `goplus lint` ships 8 rules with stable codes; runs on the analyzed AST without generating Go. Match-based rules recurse into structured for/switch/select bodies. |
 | CI example coverage | Done | CI runs `goplus check` on every `.gp` example, runs executable examples, and builds selected example packages. |
 
 ## v1.x Stabilization
@@ -70,8 +70,9 @@ structured control flow, and test coverage.
 | --- | --- | --- |
 | Formatter command shape | Done | `fmt --check`, in-place `fmt`, and `fmt --stdout` all exist. |
 | Comment-safe rewriting formatter | Done | The formatter reattaches comments (leading, trailing, verbatim in raw regions) by scanning the source and placing them against AST node spans; it verifies the comment multiset survived before overwriting. Golden idempotency (`fmt(fmt(x)) == fmt(x)`) + comment-preservation are tested over all examples. |
-| Linter | Done | `goplus lint` reports style/suspicious-code diagnostics without generating Go. Rules: `L0001` unused imports, `L0002` naming, `L0003` empty body, `L0004` redundant return, `L0006` large functions, `L0007` missing `@derive(String)`. (`L0005` is reserved/unallocated.) |
-| Linter rule expansion | Planned | Add rules for misordered decorators, `_` wildcard shadowing enum exhaustiveness, and `?` used outside an error-capable function. |
+| Linter | Done | `goplus lint` reports style/suspicious-code diagnostics without generating Go. Rules: `L0001` unused imports, `L0002` naming, `L0003` empty body, `L0004` redundant return, `L0005` unreachable arm after `_`, `L0006` large functions, `L0007` missing `@derive(String)`, `L0008` `_` hides unlisted enum variants. |
+| Linter rule expansion | Done | Added `L0005` (unreachable match arm after a `_` wildcard) and `L0008` (`_` on an enum match that hides unlisted variants, defeating exhaustiveness). The earlier "misordered decorators" and "`?` outside error-capable fn" ideas were dropped as not lint-worthy: `@memoize`+`@retry` is already a hard error (conflicting return-type requirements), and `?`-context is already a semantic error caught before lint runs. |
+| Lint CI gate | Planned | Run `goplus lint` in CI once the example suite is warning-clean (a hard gate today would fail on pre-existing warnings). |
 | IDE diagnostics | Done | JSON diagnostics carry severity (`Error`/`Warning`/`Info`), codes, caret spans, and hints via `goplus check --diagnostic-format json`. |
 | Source navigation | Done | `goplus navigate` and emitted source maps resolve `.gp`↔`.go` in both directions. |
 | Built-in derives (`String`, `Debug`, `Equal`, JSON) | Done | All five (`String`, `Debug`, `Equal`, `JsonMarshal`, `JsonUnmarshal`) are generated for structs and enums, including tagged enums. |
