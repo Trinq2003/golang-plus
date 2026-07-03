@@ -25,11 +25,12 @@ impl<'a> GoGenerator<'a> {
                 format!("{}{}\n", tabs(indent), self.transform_expr(&assign.text))
             }
             Stmt::Return(ret_stmt) => self.emit_return(ret_stmt, ret_type, indent),
-            Stmt::Defer(raw) | Stmt::Go(raw) | Stmt::Select(raw) | Stmt::Raw(raw) => {
+            Stmt::Defer(raw) | Stmt::Go(raw) | Stmt::Raw(raw) => {
                 format!("{}{}\n", tabs(indent), self.transform_expr(&raw.text))
             }
             Stmt::For(for_stmt) => self.emit_for(for_stmt, ret_type, indent),
             Stmt::Switch(switch_stmt) => self.emit_switch(switch_stmt, ret_type, indent),
+            Stmt::Select(select_stmt) => self.emit_select(select_stmt, ret_type, indent),
             Stmt::Expr(expr_stmt) => self.emit_expr_stmt(expr_stmt, ret_type, indent),
             Stmt::Match(match_stmt) => self.emit_match_stmt(match_stmt, ret_type, indent),
             Stmt::If(if_stmt) => self.emit_if_stmt(if_stmt, ret_type, indent),
@@ -68,6 +69,25 @@ impl<'a> GoGenerator<'a> {
         for case in &switch_stmt.cases {
             // `case` / `default` labels sit at the switch's indent; gofmt (run on
             // the generated Go) normalizes the exact spacing.
+            out.push_str(&format!(
+                "{}{}\n",
+                tabs(indent),
+                self.transform_expr(&case.label)
+            ));
+            out.push_str(&self.emit_block(&case.body, ret_type, indent + 1));
+        }
+        out.push_str(&format!("{}}}\n", tabs(indent)));
+        out
+    }
+
+    pub(super) fn emit_select(
+        &mut self,
+        select_stmt: &SelectStmt,
+        ret_type: &ReturnType,
+        indent: usize,
+    ) -> String {
+        let mut out = format!("{}select {{\n", tabs(indent));
+        for case in &select_stmt.cases {
             out.push_str(&format!(
                 "{}{}\n",
                 tabs(indent),

@@ -84,6 +84,34 @@ fn run(n: int) {
 }
 
 #[test]
+fn parses_select_cases_as_structured_blocks() {
+    let src = r#"
+package main
+
+import "time"
+
+fn run() {
+    select {
+    case <-time.After(1):
+        return
+    }
+}
+"#;
+    let program = parse_program(src).expect("parse should succeed");
+    let fn_decl = match &program.items[0] {
+        Item::Function(it) => it,
+        _ => panic!("expected function"),
+    };
+    let select = match &fn_decl.body.stmts[0] {
+        Stmt::Select(it) => it,
+        other => panic!("expected structured select, got {other:?}"),
+    };
+    assert_eq!(select.cases.len(), 1);
+    assert_eq!(select.cases[0].label, "case <-time.After(1):");
+    assert!(matches!(select.cases[0].body.stmts[0], Stmt::Return(_)));
+}
+
+#[test]
 fn parse_match_arm_patterns() {
     let src = r#"
 package main

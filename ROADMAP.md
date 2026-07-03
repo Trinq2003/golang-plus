@@ -18,11 +18,9 @@ Status labels:
 GoPlus is an early compiler/transpiler for `.gp -> .go`. The frontend
 (lexer/parser/sema/codegen) and a package/project orchestration layer are in
 place, with a growing fixture suite. Most v2 tooling **exists and is wired to the
-CLI**. The main remaining frontend gap is:
-
-- **`select` bodies are raw pass-through**, so any `match` / `if` nested inside
-  them is not semantically analyzed or desugared. (`for` and `switch` bodies are
-  now structured — nested `match`/`if` are analyzed and desugared.)
+CLI**. `for`, `switch`, and `select` bodies are now structured, so nested
+`match`/`if` are analyzed and desugared at any depth; only `defer` / `go` /
+assignment remain line-level raw captures (they contain no nested blocks).
 
 The rewriting formatter now **preserves comments** and is round-trip/idempotency
 tested on every example; it refuses to overwrite a file only if a comment cannot
@@ -33,7 +31,7 @@ be safely reattached (so it can never silently delete one).
 | Compiler module split | Done | Core modules live under `src/parser`, `src/sema`, `src/codegen`, and `src/compiler`. |
 | CLI `check`, `transpile`, `build`, `run`, `test` | Done | Existing workflows are preserved. |
 | Diagnostics codes/source excerpts | Done | Human and JSON diagnostics include stable codes, source excerpts, spans, and hints for parser, decorator, match, and package errors. |
-| Parser coverage | Partial | Structured: imports, `struct`/`enum`/`impl`/`fn`, `if`/`else`, `match`, `for`, `switch`, `return`, `var :=`. `select`/`defer`/`go`/assignment remain raw pass-through (single `RawStmt`), so their bodies are not analyzed. |
+| Parser coverage | Done | Structured: imports, `struct`/`enum`/`impl`/`fn`, `if`/`else`, `match`, `for`, `switch`, `select`, `return`, `var :=`. `defer`/`go`/assignment remain line-level raw captures (no nested blocks to analyze). |
 | Semantic checks | Done | Duplicate declarations, enum variant/name collisions, generated-name collisions, match arity/duplicates, and decorator checks — but only outside raw statement bodies. |
 | Source maps + navigation | Done | `--emit-source-map` writes JSON `.gp`↔`.go` ranges; `goplus navigate` resolves both directions. |
 | Formatter | Done | `fmt --check`, in-place `fmt`, and `fmt --stdout` rebuild from the AST and **reattach comments**. In-place `fmt` overwrites only when every comment is preserved (multiset check), else it refuses. Round-trip/idempotency + comment-preservation are tested over all examples. |
@@ -56,7 +54,7 @@ performance-conscious without breaking existing `.gp` syntax.
 | Add fixture/golden test matrix | Done | Fixtures cover parser, diagnostics, generated Go, tagged enum edge cases, source maps, build interop, and formatter round-trip/idempotency + comment preservation over all examples. |
 | Structure `for` bodies | Done | `for` parses a raw header + a structured body block; nested `match`/`if` are analyzed and desugared, source maps reach inside, and the formatter re-indents the body. Fixtures + a runnable `examples/for_match_state.gp` cover it. |
 | Structure `switch` bodies | Done | `switch` parses a raw header + structured `case`/`default` clauses; nested `match`/`if` are analyzed and desugared, source maps reach inside, and the formatter re-indents the clauses. |
-| Structure `select` bodies | Planned | Still captured as a single `RawStmt`. Its comm-clause cases (`case v := <-ch:`) need structured parsing. |
+| Structure `select` bodies | Done | `select` parses structured comm-clause cases (`case v := <-ch:`); clause parsing is shared with `switch`, nested `match`/`if` are analyzed, and the formatter re-indents the clauses. |
 | Structure assignments / `defer` / `go` | Planned | Currently raw line/`RawStmt` captures with no LHS/RHS breakdown. |
 | Make generic tagged enums build-clean | Done | Constructors and type references emit Go type arguments with `[...]`, not GoPlus `<...>` syntax. |
 | Improve generated Go robustness | Done | Generated Go is built in more fixtures, enum/generated-name collisions are caught earlier, and output stays gofmt-readable. |

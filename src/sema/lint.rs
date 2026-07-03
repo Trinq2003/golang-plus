@@ -170,7 +170,15 @@ fn collect_block_idents(block: &Block, texts: &mut HashSet<String>) {
                     collect_block_idents(&case.body, texts);
                 }
             }
-            Stmt::Defer(raw) | Stmt::Go(raw) | Stmt::Select(raw) | Stmt::Raw(raw) => {
+            Stmt::Select(select_stmt) => {
+                for case in &select_stmt.cases {
+                    for word in case.label.split_whitespace() {
+                        texts.insert(word.to_string());
+                    }
+                    collect_block_idents(&case.body, texts);
+                }
+            }
+            Stmt::Defer(raw) | Stmt::Go(raw) | Stmt::Raw(raw) => {
                 for word in raw.text.split_whitespace() {
                     texts.insert(word.to_string());
                 }

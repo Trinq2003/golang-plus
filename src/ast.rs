@@ -160,7 +160,7 @@ pub enum Stmt {
     If(IfStmt),
     For(ForStmt),
     Switch(SwitchStmt),
-    Select(RawStmt),
+    Select(SelectStmt),
     Raw(RawStmt),
 }
 
@@ -186,13 +186,21 @@ pub struct SwitchStmt {
     pub span: Span,
 }
 
-/// One `case ...:` / `default:` clause of a `switch`.
+/// One `case ...:` / `default:` clause of a `switch` or `select`. For `select`
+/// the label is a communication clause, e.g. `case v := <-ch:`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SwitchCase {
     /// The clause label including the trailing colon, e.g. `case 2:` / `default:`.
     pub label: String,
     pub label_span: Span,
     pub body: Block,
+    pub span: Span,
+}
+
+/// A `select` with structured comm-clause cases (`select` never has a header).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SelectStmt {
+    pub cases: Vec<SwitchCase>,
     pub span: Span,
 }
 
