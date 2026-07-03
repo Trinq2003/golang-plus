@@ -6,3 +6,13 @@
 _ISSUE.md
 _temp/
 docs-site/book/
+
+# LaTeX build artifacts (report/)
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+report/preview_*.png
