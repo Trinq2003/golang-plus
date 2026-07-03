@@ -62,7 +62,13 @@ pub fn analyze_with_model(
             }
             Item::Impl(impl_block) => {
                 for method in &mut impl_block.methods {
-                    analyze_method(method, &impl_block.target, &model.enums, &mut diagnostics);
+                    analyze_method(
+                        method,
+                        &impl_block.target,
+                        &model.enums,
+                        &model.function_params,
+                        &mut diagnostics,
+                    );
                 }
             }
             Item::Struct(_) | Item::Enum(_) | Item::Raw(_) => {}
@@ -191,14 +197,18 @@ pub(super) fn analyze_method(
     method: &mut MethodDecl,
     target: &str,
     enums: &HashMap<String, EnumDecl>,
+    known_functions: &HashMap<String, Vec<ParamDecl>>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    // Validate custom decorators on methods against known top-level decorator
+    // functions (previously an empty map was passed, silently skipping all
+    // custom-decorator checks on methods).
     validate_decorators(
         &method.decorators,
         &method.ret,
         &method.params,
         true,
-        &HashMap::new(),
+        known_functions,
         diagnostics,
     );
 

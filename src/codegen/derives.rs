@@ -23,6 +23,10 @@ impl<'a> GoGenerator<'a> {
                     out.push_str("\n\n");
                     out.push_str(&self.emit_struct_json_unmarshal(decl));
                 }
+                DeriveKind::Clone => {
+                    out.push_str("\n\n");
+                    out.push_str(&self.emit_struct_clone(decl));
+                }
             }
         }
         out
@@ -57,6 +61,10 @@ impl<'a> GoGenerator<'a> {
                 DeriveKind::JsonUnmarshal => {
                     out.push_str("\n\n");
                     out.push_str(&self.emit_enum_json_unmarshal(decl));
+                }
+                DeriveKind::Clone => {
+                    out.push_str("\n\n");
+                    out.push_str(&self.emit_enum_clone(decl));
                 }
             }
         }
@@ -203,6 +211,40 @@ impl<'a> GoGenerator<'a> {
         }
         out.push_str("\tdefault:\n\t\treturn false\n\t}\n}");
         out
+    }
+
+    // --- Clone derive ---
+
+    /// Deep-copies top-level slice and map fields (which a plain struct copy
+    /// would share); scalar/struct/pointer fields keep Go's value-copy semantics.
+    fn emit_struct_clone(&self, decl: &StructDecl) -> String {
+        let name = &decl.name;
+        let mut out = format!("func (s {name}) Clone() {name} {{\n\tout := s\n");
+        for field in &decl.fields {
+            let ty = render_type_ref(&field.ty);
+            let ty = ty.trim();
+            let f = &field.name;
+            if ty.starts_with("[]") {
+                out.push_str(&format!("\tout.{f} = append({ty}(nil), s.{f}...)\n"));
+            } else if ty.starts_with("map[") {
+                out.push_str(&format!(
+                    "\tif s.{f} != nil {{\n\t\tout.{f} = make({ty}, len(s.{f}))\n\t\tfor k, v := range s.{f} {{\n\t\t\tout.{f}[k] = v\n\t\t}}\n\t}}\n"
+                ));
+            }
+        }
+        out.push_str("\treturn out\n}");
+        out
+    }
+
+    /// A `Clone` for enums returns a value copy. Simple enums are integers, so
+    /// this is a full copy; tagged-enum payloads are copied shallowly.
+    fn emit_enum_clone(&self, decl: &EnumDecl) -> String {
+        let type_params = render_type_params(&decl.type_params);
+        format!(
+            "func (e {name}{tp}) Clone() {name}{tp} {{\n\treturn e\n}}",
+            name = decl.name,
+            tp = type_params
+        )
     }
 
     // --- JSON derives ---

@@ -35,6 +35,7 @@ impl<'a> Parser<'a> {
                     }
                     "JsonMarshal" => derives.push(DeriveKind::JsonMarshal),
                     "JsonUnmarshal" => derives.push(DeriveKind::JsonUnmarshal),
+                    "Clone" => derives.push(DeriveKind::Clone),
                     other => {
                         self.diagnostics.push(
                             Diagnostic::new(
@@ -42,7 +43,7 @@ impl<'a> Parser<'a> {
                                 Some(ann.span.clone()),
                             )
                             .with_hint(
-                                "supported: String, Debug, Equal, JSON, JsonMarshal, JsonUnmarshal",
+                                "supported: String, Debug, Equal, Clone, JSON, JsonMarshal, JsonUnmarshal",
                             ),
                         );
                     }

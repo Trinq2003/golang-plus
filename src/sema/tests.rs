@@ -120,6 +120,61 @@ fn scan(n: int, s: Status) {
 }
 
 #[test]
+fn validates_custom_decorator_arity_on_methods() {
+    let src = r#"
+package main
+
+fn trace(next: func(x int) int, label: string) -> func(x int) int {
+    return next
+}
+
+struct T {
+    v: int
+}
+
+impl T {
+    @trace
+    fn compute(self, x: int) -> int {
+        return x
+    }
+}
+"#;
+    let mut program = parse_program(src).expect("parse ok");
+    // `@trace` expects 1 argument (label) but is applied with 0. Previously this
+    // went unchecked on methods (an empty known_functions map was passed).
+    let result = analyze(&mut program);
+    assert!(
+        result.is_err(),
+        "wrong-arity custom decorator on a method must be caught"
+    );
+}
+
+#[test]
+fn accepts_correct_custom_decorator_on_method() {
+    let src = r#"
+package main
+
+fn trace(next: func(x int) int, label: string) -> func(x int) int {
+    return next
+}
+
+struct T {
+    v: int
+}
+
+impl T {
+    @trace("compute")
+    fn compute(self, x: int) -> int {
+        return x
+    }
+}
+"#;
+    let mut program = parse_program(src).expect("parse ok");
+    let result = analyze(&mut program);
+    result.expect("a correctly-applied custom decorator on a method should analyze");
+}
+
+#[test]
 fn rejects_memoize_with_slice_param() {
     let src = r#"
 package main

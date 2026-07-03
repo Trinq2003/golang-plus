@@ -154,6 +154,7 @@ impl<'a> GpFormatter<'a> {
                 DeriveKind::Equal => "Equal",
                 DeriveKind::JsonMarshal => "JsonMarshal",
                 DeriveKind::JsonUnmarshal => "JsonUnmarshal",
+                DeriveKind::Clone => "Clone",
             })
             .collect();
         self.output

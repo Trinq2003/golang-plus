@@ -25,6 +25,26 @@ fn load(path: string) -> string! {
 }
 
 #[test]
+fn derives_clone_deep_copies_slices_and_maps() {
+    let src = r#"
+package main
+
+@derive(Clone)
+struct Bag {
+    items: []int
+    counts: map[string]int
+    name: string
+}
+"#;
+    let mut program = parse_program(src).expect("parse ok");
+    let model = analyze(&mut program).expect("sema ok");
+    let go = generate_go(&program, &model);
+    assert!(go.contains("func (s Bag) Clone() Bag"), "{go}");
+    assert!(go.contains("append([]int(nil), s.items...)"), "{go}");
+    assert!(go.contains("make(map[string]int, len(s.counts))"), "{go}");
+}
+
+#[test]
 fn retry_without_backoff_does_not_import_time() {
     let src = r#"
 package main
