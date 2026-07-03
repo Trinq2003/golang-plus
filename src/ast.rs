@@ -333,6 +333,7 @@ pub enum DeriveKind {
     Equal,
     JsonMarshal,
     JsonUnmarshal,
+    Clone,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

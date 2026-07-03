@@ -76,10 +76,10 @@ structured control flow, and test coverage.
 | IDE diagnostics | Done | JSON diagnostics carry severity (`Error`/`Warning`/`Info`), codes, caret spans, and hints via `goplus check --diagnostic-format json`. |
 | Source navigation | Done | `goplus navigate` and emitted source maps resolve `.gp`↔`.go` in both directions. |
 | Built-in derives (`String`, `Debug`, `Equal`, JSON) | Done | All five (`String`, `Debug`, `Equal`, `JsonMarshal`, `JsonUnmarshal`) are generated for structs and enums, including tagged enums. |
-| Richer derives (`Clone`, `Ord`, `Hash`) | Planned | Deep-copy `Clone` (slices/maps), ordering, and hashing are not implemented. |
+| Richer derives (`Clone`, `Ord`, `Hash`) | Partial | `@derive(Clone)` deep-copies slice/map fields on structs (avoiding Go's silent shared-reference copy) and value-copies enums. `Ord`/`Hash` are not implemented yet. |
 | User-defined derives | Planned | Analogous to user-defined decorators; no mechanism today. |
 | Decorator signature validation (functions) | Partial | Local top-level decorators get `next`-param-count + return-shape checks (heuristic, string-based), beyond basic arity. Package-qualified (`pkg.dec`) decorators are skipped. |
-| Decorator signature validation (methods) | Planned | **Known gap/bug:** `analyze_method` passes an empty `known_functions` map, and method params are never registered, so custom-decorator validation on methods is a silent no-op. |
+| Decorator signature validation (methods) | Done | Custom decorators on methods are validated against known top-level decorator functions (arity + `next`-function shape), the same as on free functions; `analyze_method` now receives the function table instead of an empty map. |
 | Package graph improvements | Partial | Topological build (Kahn) with cycle detection and content-hash caching exist; large-project discovery/caching can improve further. |
 
 ## v3 VSCode Extension

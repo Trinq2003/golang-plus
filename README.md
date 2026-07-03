@@ -173,7 +173,7 @@ The extension requires the `goplus` CLI to be available in your system `$PATH` (
 - Syntax: `fn` (and standard Go `func`), `struct`, `enum` (simple + tagged generic), `impl`.
 - Error sugar: `-> T!`, `-> !`, `expr?`.
 - `match` with enum exhaustive checking.
-- `@derive(String, Debug, Equal, JsonMarshal, JsonUnmarshal)` for struct/enum.
+- `@derive(String, Debug, Equal, Clone, JsonMarshal, JsonUnmarshal)` for struct/enum (`Clone` deep-copies slice/map fields).
 - Package compilation:
   - Standalone `.gp` files outside a Go module compile as the selected file.
   - Directories and Go module packages compile all sibling `.gp` files together.
@@ -203,7 +203,7 @@ Tooling that exists today (see [ROADMAP.md](ROADMAP.md) for exact status and kno
 - **Linter**: `goplus lint` reports stylistic/suspicious-code rules on the analyzed AST without compiling to Go.
 - **Source Navigation**: `goplus navigate` and emitted source maps resolve `.gp` ↔ `.go` in both directions.
 - **Topological Builds**: the package graph uses Kahn's algorithm to order transpilation and catch cycles early, with content-hash caching of unchanged packages.
-- **Decorator Validation**: custom decorators referencing a local top-level function are checked for arity and `next` param-count/return-shape compatibility (heuristic). Method and package-qualified decorators are not yet signature-checked.
+- **Decorator Validation**: custom decorators referencing a local top-level function are checked for arity and `next` param-count/return-shape compatibility (heuristic), on both free functions and methods. Package-qualified decorators are not signature-checked.
 
 ## Roadmap & Status
 
