@@ -6,6 +6,8 @@
 
 `goplus` is a surface language for Go, implemented as a Rust transpiler (`*.gp -> *.go`).
 
+📖 **Docs site**: <https://trinq2003.github.io/golang-plus/> · **Status**: [ROADMAP.md](ROADMAP.md) · **Benchmarks**: [BENCHMARKS.md](BENCHMARKS.md)
+
 The project goal is to keep the full Go ecosystem (toolchain, runtime, packages) while improving developer ergonomics: cleaner error flow, better enum/match support, and safe compile-time metaprogramming.
 
 ## Vision

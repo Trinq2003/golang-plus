@@ -19,6 +19,9 @@ jobs:
     - uses: actions/setup-go@v5
       with:
         go-version: stable
+    - name: Docs consistency (README defers to ROADMAP)
+      shell: bash
+      run: bash scripts/check_docs.sh
     - name: Check formatting
       run: cargo fmt --check
     - name: Run clippy
