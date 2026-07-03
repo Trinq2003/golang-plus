@@ -360,7 +360,6 @@ impl<'a> GpFormatter<'a> {
             }
             Stmt::Defer(raw)
             | Stmt::Go(raw)
-            | Stmt::For(raw)
             | Stmt::Switch(raw)
             | Stmt::Select(raw)
             | Stmt::Raw(raw) => {
@@ -369,6 +368,19 @@ impl<'a> GpFormatter<'a> {
                 // any comments inside it; drop them from the pending list so they
                 // are not emitted twice.
                 self.consume_within(raw.span.end);
+            }
+            Stmt::For(for_stmt) => {
+                let hdr = if for_stmt.header.is_empty() {
+                    String::new()
+                } else {
+                    format!("{} ", for_stmt.header)
+                };
+                self.output.push_str(&format!("{}for {}{{\n", tabs, hdr));
+                // A comment inside the header is already emitted verbatim as part
+                // of `hdr`; drop it from the pending list.
+                self.consume_within(for_stmt.body.span.start);
+                self.emit_block(&for_stmt.body, indent + 1);
+                self.output.push_str(&format!("{}}}\n", tabs));
             }
             Stmt::Expr(e) => {
                 let text = if e.expr.has_try {
@@ -497,12 +509,8 @@ fn stmt_span(stmt: &Stmt) -> &Span {
         Stmt::VarDecl(s) => &s.span,
         Stmt::Assign(s) => &s.span,
         Stmt::Return(s) => &s.span,
-        Stmt::Defer(s)
-        | Stmt::Go(s)
-        | Stmt::For(s)
-        | Stmt::Switch(s)
-        | Stmt::Select(s)
-        | Stmt::Raw(s) => &s.span,
+        Stmt::Defer(s) | Stmt::Go(s) | Stmt::Switch(s) | Stmt::Select(s) | Stmt::Raw(s) => &s.span,
+        Stmt::For(s) => &s.span,
         Stmt::Expr(s) => &s.span,
         Stmt::Match(s) => &s.span,
         Stmt::If(s) => &s.span,

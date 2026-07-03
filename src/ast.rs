@@ -158,10 +158,21 @@ pub enum Stmt {
     Expr(ExprStmt),
     Match(MatchStmt),
     If(IfStmt),
-    For(RawStmt),
+    For(ForStmt),
     Switch(RawStmt),
     Select(RawStmt),
     Raw(RawStmt),
+}
+
+/// A `for` loop with a raw header (condition / range / 3-clause, kept as text)
+/// and a structured body so nested statements are analyzed and re-formatted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForStmt {
+    /// Text between `for` and the body `{` (empty for `for { ... }`).
+    pub header: String,
+    pub header_span: Span,
+    pub body: Block,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

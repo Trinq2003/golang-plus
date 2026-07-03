@@ -153,9 +153,14 @@ fn collect_block_idents(block: &Block, texts: &mut HashSet<String>) {
                     }
                 }
             }
+            Stmt::For(for_stmt) => {
+                for word in for_stmt.header.split_whitespace() {
+                    texts.insert(word.to_string());
+                }
+                collect_block_idents(&for_stmt.body, texts);
+            }
             Stmt::Defer(raw)
             | Stmt::Go(raw)
-            | Stmt::For(raw)
             | Stmt::Switch(raw)
             | Stmt::Select(raw)
             | Stmt::Raw(raw) => {

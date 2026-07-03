@@ -20,8 +20,9 @@ GoPlus is an early compiler/transpiler for `.gp -> .go`. The frontend
 place, with a growing fixture suite. Most v2 tooling **exists and is wired to the
 CLI**. The main remaining frontend gap is:
 
-- **`for` / `switch` / `select` bodies are raw pass-through**, so any
-  `match` / `if` nested inside them is not semantically analyzed or desugared.
+- **`switch` / `select` bodies are raw pass-through**, so any `match` / `if`
+  nested inside them is not semantically analyzed or desugared. (`for` bodies are
+  now structured — nested `match`/`if` inside loops are analyzed and desugared.)
 
 The rewriting formatter now **preserves comments** and is round-trip/idempotency
 tested on every example; it refuses to overwrite a file only if a comment cannot
@@ -32,7 +33,7 @@ be safely reattached (so it can never silently delete one).
 | Compiler module split | Done | Core modules live under `src/parser`, `src/sema`, `src/codegen`, and `src/compiler`. |
 | CLI `check`, `transpile`, `build`, `run`, `test` | Done | Existing workflows are preserved. |
 | Diagnostics codes/source excerpts | Done | Human and JSON diagnostics include stable codes, source excerpts, spans, and hints for parser, decorator, match, and package errors. |
-| Parser coverage | Partial | Structured for imports, `struct`/`enum`/`impl`/`fn`, `if`/`else`, `match`, `return`, `var :=`. `for`/`switch`/`select`/`defer`/`go`/assignment are raw pass-through (single `RawStmt`), so their bodies are not analyzed. |
+| Parser coverage | Partial | Structured: imports, `struct`/`enum`/`impl`/`fn`, `if`/`else`, `match`, `for`, `return`, `var :=`. `switch`/`select`/`defer`/`go`/assignment remain raw pass-through (single `RawStmt`), so their bodies are not analyzed. |
 | Semantic checks | Done | Duplicate declarations, enum variant/name collisions, generated-name collisions, match arity/duplicates, and decorator checks — but only outside raw statement bodies. |
 | Source maps + navigation | Done | `--emit-source-map` writes JSON `.gp`↔`.go` ranges; `goplus navigate` resolves both directions. |
 | Formatter | Done | `fmt --check`, in-place `fmt`, and `fmt --stdout` rebuild from the AST and **reattach comments**. In-place `fmt` overwrites only when every comment is preserved (multiset check), else it refuses. Round-trip/idempotency + comment-preservation are tested over all examples. |
@@ -53,7 +54,8 @@ performance-conscious without breaking existing `.gp` syntax.
 | Expand diagnostic precision | Done | Focused spans, stable codes, and hints cover parser recovery, decorator errors, match errors, and package/module errors. |
 | Complete real source map mappings | Done | `--emit-source-map` records useful `.gp` to generated `.go` ranges for functions, declarations, match arms, and statements. |
 | Add fixture/golden test matrix | Done | Fixtures cover parser, diagnostics, generated Go, tagged enum edge cases, source maps, build interop, and formatter round-trip/idempotency + comment preservation over all examples. |
-| Structure `for` / `switch` / `select` bodies | Planned | These are captured as a single `RawStmt` today. Goal: parse headers + bodies into real `Block`/case lists so nested `match`/`if` are analyzed and desugared at any depth. |
+| Structure `for` bodies | Done | `for` parses a raw header + a structured body block; nested `match`/`if` are analyzed and desugared, source maps reach inside, and the formatter re-indents the body. Fixtures + a runnable `examples/for_match_state.gp` cover it. |
+| Structure `switch` / `select` bodies | Planned | Still captured as a single `RawStmt`. Goal: parse `case`/`default` clauses into real statement lists so nested `match`/`if` are analyzed at any depth. |
 | Structure assignments / `defer` / `go` | Planned | Currently raw line/`RawStmt` captures with no LHS/RHS breakdown. |
 | Make generic tagged enums build-clean | Done | Constructors and type references emit Go type arguments with `[...]`, not GoPlus `<...>` syntax. |
 | Improve generated Go robustness | Done | Generated Go is built in more fixtures, enum/generated-name collisions are caught earlier, and output stays gofmt-readable. |

@@ -58,6 +58,37 @@ fn label(s: Status) -> string {
 }
 
 #[test]
+fn checks_match_exhaustiveness_inside_for() {
+    let src = r#"
+package main
+
+enum Status {
+    Pending
+    Running
+    Done
+}
+
+fn scan(s: Status) {
+    for true {
+        match s {
+            Status::Pending => {}
+            Status::Running => {}
+        }
+    }
+}
+"#;
+    let mut program = parse_program(src).expect("parse ok");
+    // Before structured `for` parsing, the loop body was opaque raw text and the
+    // nested non-exhaustive match (missing `Done`) went unchecked. Now the body
+    // is a real block, so semantic analysis reaches inside the loop.
+    let result = analyze(&mut program);
+    assert!(
+        result.is_err(),
+        "non-exhaustive match nested in a for loop must be caught"
+    );
+}
+
+#[test]
 fn rejects_memoize_with_slice_param() {
     let src = r#"
 package main

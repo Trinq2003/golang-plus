@@ -275,12 +275,17 @@ pub(super) fn analyze_block(
                     }
                 }
             }
-            Stmt::Defer(_)
-            | Stmt::Go(_)
-            | Stmt::For(_)
-            | Stmt::Switch(_)
-            | Stmt::Select(_)
-            | Stmt::Raw(_) => {}
+            Stmt::For(for_stmt) => {
+                let mut for_vars = vars.clone();
+                analyze_block(
+                    &mut for_stmt.body,
+                    ret_type,
+                    enums,
+                    diagnostics,
+                    &mut for_vars,
+                );
+            }
+            Stmt::Defer(_) | Stmt::Go(_) | Stmt::Switch(_) | Stmt::Select(_) | Stmt::Raw(_) => {}
         }
     }
 }

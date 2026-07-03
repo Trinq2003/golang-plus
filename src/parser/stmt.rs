@@ -40,7 +40,7 @@ impl<'a> Parser<'a> {
             return self.parse_if_stmt().map(Stmt::If);
         }
         if self.at(TokenKind::For) {
-            return self.parse_raw_stmt().map(Stmt::For);
+            return self.parse_for_stmt();
         }
         if self.at(TokenKind::Switch) {
             return self.parse_raw_stmt().map(Stmt::Switch);
@@ -243,6 +243,63 @@ impl<'a> Parser<'a> {
             else_branch,
             span: start..end,
         })
+    }
+
+    /// Parse a `for` loop with a raw header and a structured body. Falls back to
+    /// capturing the whole construct as a raw statement if no body `{` is found.
+    pub(super) fn parse_for_stmt(&mut self) -> Option<Stmt> {
+        let saved = self.idx;
+        let start = self
+            .expect_token(TokenKind::For, "expected `for`")?
+            .span
+            .start;
+
+        // Find the body-opening `{` at paren/bracket depth 0, so composite
+        // literals in the header (e.g. `for x < len(T{}) {`) don't confuse it.
+        let mut paren = 0usize;
+        let mut bracket = 0usize;
+        let mut brace_idx = None;
+        let mut j = self.idx;
+        while j < self.tokens.len() {
+            match self.tokens[j].kind {
+                TokenKind::LParen => paren += 1,
+                TokenKind::RParen => paren = paren.saturating_sub(1),
+                TokenKind::LBracket => bracket += 1,
+                TokenKind::RBracket => bracket = bracket.saturating_sub(1),
+                TokenKind::LBrace if paren == 0 && bracket == 0 => {
+                    brace_idx = Some(j);
+                    break;
+                }
+                TokenKind::RBrace if paren == 0 && bracket == 0 => break,
+                _ => {}
+            }
+            j += 1;
+        }
+
+        let Some(brace_idx) = brace_idx else {
+            // No body brace: fall back to the old raw pass-through behavior.
+            self.idx = saved;
+            return self.parse_raw_stmt().map(Stmt::Raw);
+        };
+
+        let header_start = self.tokens[self.idx].span.start;
+        let header_end = self.tokens[brace_idx].span.start;
+        let header = if header_start < header_end {
+            self.source[header_start..header_end].trim().to_string()
+        } else {
+            String::new()
+        };
+        let header_span = header_start..header_end;
+
+        self.idx = brace_idx;
+        let body = self.parse_block()?;
+        let end = body.span.end;
+        Some(Stmt::For(ForStmt {
+            header,
+            header_span,
+            body,
+            span: start..end,
+        }))
     }
 
     pub(super) fn parse_raw_stmt(&mut self) -> Option<RawStmt> {

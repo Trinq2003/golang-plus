@@ -245,7 +245,18 @@ impl<'a> SourceMapBuilder<'a> {
                 }
                 next
             }
-            Stmt::For(raw) => self.map_raw_stmt(source, raw, "for", cursor),
+            Stmt::For(for_stmt) => {
+                let next = self.map_named_from(
+                    source,
+                    for_stmt.span.clone(),
+                    "statement",
+                    "for",
+                    "for ",
+                    cursor,
+                );
+                self.map_block(source, &for_stmt.body, next.unwrap_or(cursor));
+                next
+            }
             Stmt::Switch(raw) => self.map_raw_stmt(source, raw, "switch", cursor),
             Stmt::Select(raw) => self.map_raw_stmt(source, raw, "select", cursor),
             Stmt::Raw(raw) => self.map_raw_stmt(source, raw, "raw", cursor),
