@@ -205,6 +205,18 @@ Tooling that exists today (see [ROADMAP.md](ROADMAP.md) for exact status and kno
 - **Topological Builds**: the package graph uses Kahn's algorithm to order transpilation and catch cycles early, with content-hash caching of unchanged packages.
 - **Decorator Validation**: custom decorators referencing a local top-level function are checked for arity and `next` param-count/return-shape compatibility (heuristic), on both free functions and methods. Package-qualified decorators are not signature-checked.
 
+## Benchmarks
+
+Three reproducible benchmarks back the core claims (details + methodology in
+[BENCHMARKS.md](BENCHMARKS.md), reproduce with [`benchmarks/run.sh`](benchmarks/run.sh)):
+
+- **Less code**: the same behaviour uses **~38–79 % fewer GPT‑4 tokens** in `.gp`
+  than in hand-written Go (~59 % overall across error handling, enums, and decorators).
+- **No runtime cost**: GoPlus-generated Go matches hand-written Go within noise
+  with **0 allocations** — the sugar desugars to plain Go.
+- **Fast to transpile**: parse ~3 µs, analyze ~6 µs, codegen ~1.4 ms for a sample,
+  with a content-hash package cache that skips unchanged packages on rebuild.
+
 ## Roadmap & Status
 
 [ROADMAP.md](ROADMAP.md) is the **single source of truth** for per-feature status.

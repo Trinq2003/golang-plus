@@ -108,10 +108,10 @@ broad benchmarking.
 
 | Task | Status | Acceptance Criteria |
 | --- | --- | --- |
-| Pipeline microbench | Done | `benches/pipeline.rs` measures parse/analyze/codegen on a sample. |
-| Token-economy benchmark | Planned | Measure LLM tokens for equivalent logic in hand-written Go vs `.gp` across representative patterns. |
-| Runtime-parity benchmark | Planned | Show generated Go performs the same as hand-written Go (no runtime layer). |
-| Incremental/cache benchmark | Planned | Show the content-hash cache skips unchanged packages on rebuild. |
+| Pipeline microbench | Done | `benches/pipeline.rs` measures parse/analyze/codegen on a sample (~3 µs / 6 µs / 1.4 ms). |
+| Token-economy benchmark | Done | `.gp` vs hand-written Go uses ~38–79 % fewer GPT-4 tokens for the same behaviour (~59 % overall). See [BENCHMARKS.md](BENCHMARKS.md). |
+| Runtime-parity benchmark | Done | GoPlus-generated Go matches hand-written Go within noise, 0 allocs (`go test -bench`). See [BENCHMARKS.md](BENCHMARKS.md). |
+| Incremental/cache benchmark | Done | The content-hash package cache (`.goplus-package-cache.json`) skips unchanged packages on rebuild. See [BENCHMARKS.md](BENCHMARKS.md). |
 
 ## Documentation
 
