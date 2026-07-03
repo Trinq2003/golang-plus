@@ -1,28 +1,93 @@
 use crate::ast::*;
 
-pub fn format_gp(program: &Program, _original_source: &str) -> String {
-    let mut f = GpFormatter::new();
+pub fn format_gp(program: &Program, original_source: &str) -> String {
+    let mut f = GpFormatter::new(original_source);
     f.emit_program(program);
     f.output
 }
 
-struct GpFormatter {
-    output: String,
+/// A comment scanned from the original source, with its byte range and text.
+#[derive(Clone, Debug)]
+pub struct Comment {
+    pub start: usize,
+    pub end: usize,
+    pub text: String,
+    pub is_line: bool,
 }
 
-impl GpFormatter {
-    fn new() -> Self {
+struct GpFormatter<'a> {
+    output: String,
+    source: &'a str,
+    comments: Vec<Comment>,
+    /// Index of the next comment not yet emitted or consumed.
+    next: usize,
+}
+
+impl<'a> GpFormatter<'a> {
+    fn new(source: &'a str) -> Self {
         Self {
             output: String::new(),
+            source,
+            comments: scan_comments(source),
+            next: 0,
         }
     }
 
+    // ---- comment interleaving helpers ----
+
+    /// Emit every pending comment that starts before `before`, each on its own
+    /// line at the given indent.
+    fn flush_leading(&mut self, before: usize, tabs: &str) {
+        while self.next < self.comments.len() && self.comments[self.next].start < before {
+            let text = self.comments[self.next].text.trim_end().to_string();
+            self.output.push_str(tabs);
+            self.output.push_str(&text);
+            self.output.push('\n');
+            self.next += 1;
+        }
+    }
+
+    /// Discard pending comments that start before `end` because they are already
+    /// present verbatim in a raw/pass-through region that was just emitted.
+    fn consume_within(&mut self, end: usize) {
+        while self.next < self.comments.len() && self.comments[self.next].start < end {
+            self.next += 1;
+        }
+    }
+
+    /// If the next pending comment sits on the same source line as `after` (the
+    /// source end of the construct just emitted), splice it inline at the end of
+    /// the current output line.
+    fn flush_trailing(&mut self, after: usize) {
+        if self.next >= self.comments.len() {
+            return;
+        }
+        let start = self.comments[self.next].start;
+        if start < after || after > self.source.len() || start > self.source.len() {
+            return;
+        }
+        if self.source[after..start].contains('\n') {
+            return;
+        }
+        let text = self.comments[self.next].text.trim_end().to_string();
+        if self.output.ends_with('\n') {
+            self.output.pop();
+        }
+        self.output.push(' ');
+        self.output.push_str(&text);
+        self.output.push('\n');
+        self.next += 1;
+    }
+
     fn emit_program(&mut self, program: &Program) {
+        // File-header comments that appear before `package`.
+        self.flush_leading(program.span.start, "");
         self.output
             .push_str(&format!("package {}\n", program.package));
 
         if !program.imports.is_empty() {
             self.output.push('\n');
+            self.flush_leading(program.imports[0].span.start, "");
             if program.imports.len() == 1 {
                 self.emit_import_single(&program.imports[0]);
             } else {
@@ -32,9 +97,13 @@ impl GpFormatter {
 
         for item in &program.items {
             self.output.push('\n');
+            self.flush_leading(item_span(item).start, "");
             self.emit_item(item);
             self.output.push('\n');
         }
+
+        // Footer comments after the last item.
+        self.flush_leading(self.source.len(), "");
     }
 
     fn emit_import_single(&mut self, import: &ImportDecl) {
@@ -50,6 +119,7 @@ impl GpFormatter {
     fn emit_import_group(&mut self, imports: &[ImportDecl]) {
         self.output.push_str("import (\n");
         for import in imports {
+            self.flush_leading(import.span.start, "\t");
             self.output.push('\t');
             if let Some(alias) = &import.alias {
                 self.output.push_str(alias);
@@ -57,6 +127,7 @@ impl GpFormatter {
             }
             self.output.push_str(&format!("\"{}\"", import.path));
             self.output.push('\n');
+            self.flush_trailing(import.span.end);
         }
         self.output.push_str(")\n");
     }
@@ -93,6 +164,7 @@ impl GpFormatter {
         self.emit_derives(&decl.derives);
         self.output.push_str(&format!("struct {} {{\n", decl.name));
         for field in &decl.fields {
+            self.flush_leading(field.span.start, "\t");
             let tag = field
                 .tag
                 .as_ref()
@@ -100,7 +172,9 @@ impl GpFormatter {
                 .unwrap_or_default();
             self.output
                 .push_str(&format!("\t{}: {}{}\n", field.name, field.ty.raw, tag));
+            self.flush_trailing(field.span.end);
         }
+        self.flush_leading(decl.span.end, "\t");
         self.output.push('}');
     }
 
@@ -115,6 +189,7 @@ impl GpFormatter {
         }
         self.output.push_str(" {\n");
         for variant in &decl.variants {
+            self.flush_leading(variant.span.start, "\t");
             self.output.push('\t');
             self.output.push_str(&variant.name);
             if !variant.payload.is_empty() {
@@ -124,7 +199,9 @@ impl GpFormatter {
                 self.output.push(')');
             }
             self.output.push('\n');
+            self.flush_trailing(variant.span.end);
         }
+        self.flush_leading(decl.span.end, "\t");
         self.output.push('}');
     }
 
@@ -170,8 +247,10 @@ impl GpFormatter {
             if idx > 0 {
                 self.output.push('\n');
             }
+            self.flush_leading(method.span.start, "\t");
             self.emit_method(method);
         }
+        self.flush_leading(decl.span.end, "\t");
         self.output.push('}');
     }
 
@@ -188,17 +267,26 @@ impl GpFormatter {
             self.output.push('\n');
             self.output.push('\t');
         }
-        match method.receiver {
-            ReceiverKind::Pointer => self.output.push_str("fn mut "),
-            ReceiverKind::Value => self.output.push_str("fn "),
-        }
+        self.output.push_str("fn ");
         self.output.push_str(&method.name);
+        if !method.type_params.is_empty() {
+            self.output.push('<');
+            self.output.push_str(&method.type_params.join(", "));
+            self.output.push('>');
+        }
         self.output.push('(');
-        let params: Vec<String> = method
-            .params
-            .iter()
-            .map(|p| format!("{}: {}", p.name, p.ty.raw))
-            .collect();
+        // The receiver is written as the first parameter (`self` / `mut self`),
+        // matching the parser (`fn m(self, ...)`), not a `fn mut ` prefix.
+        let mut params: Vec<String> = vec![match method.receiver {
+            ReceiverKind::Value => "self".to_string(),
+            ReceiverKind::Pointer => "mut self".to_string(),
+        }];
+        params.extend(
+            method
+                .params
+                .iter()
+                .map(|p| format!("{}: {}", p.name, p.ty.raw)),
+        );
         self.output.push_str(&params.join(", "));
         self.output.push(')');
         self.emit_return_type(&method.ret);
@@ -229,8 +317,12 @@ impl GpFormatter {
     fn emit_block(&mut self, block: &Block, indent: usize) {
         let tabs = "\t".repeat(indent);
         for stmt in &block.stmts {
+            self.flush_leading(stmt_span(stmt).start, &tabs);
             self.emit_stmt(stmt, &tabs, indent);
+            self.flush_trailing(stmt_span(stmt).end);
         }
+        // Comments between the last statement and the block's closing brace.
+        self.flush_leading(block.span.end.saturating_sub(1), &tabs);
     }
 
     fn emit_stmt(&mut self, stmt: &Stmt, tabs: &str, indent: usize) {
@@ -266,12 +358,18 @@ impl GpFormatter {
                         .push_str(&format!("{}return {}\n", tabs, exprs.join(", ")));
                 }
             }
-            Stmt::Defer(raw) => self.output.push_str(&format!("{}{}\n", tabs, raw.text)),
-            Stmt::Go(raw) => self.output.push_str(&format!("{}{}\n", tabs, raw.text)),
-            Stmt::For(raw) => self.output.push_str(&format!("{}{}\n", tabs, raw.text)),
-            Stmt::Switch(raw) => self.output.push_str(&format!("{}{}\n", tabs, raw.text)),
-            Stmt::Select(raw) => self.output.push_str(&format!("{}{}\n", tabs, raw.text)),
-            Stmt::Raw(raw) => self.output.push_str(&format!("{}{}\n", tabs, raw.text)),
+            Stmt::Defer(raw)
+            | Stmt::Go(raw)
+            | Stmt::For(raw)
+            | Stmt::Switch(raw)
+            | Stmt::Select(raw)
+            | Stmt::Raw(raw) => {
+                self.output.push_str(&format!("{}{}\n", tabs, raw.text));
+                // The raw text is a verbatim source slice that already contains
+                // any comments inside it; drop them from the pending list so they
+                // are not emitted twice.
+                self.consume_within(raw.span.end);
+            }
             Stmt::Expr(e) => {
                 let text = if e.expr.has_try {
                     format!("{}?", e.expr.text)
@@ -294,6 +392,7 @@ impl GpFormatter {
         self.output
             .push_str(&format!("{}match {} {{\n", tabs, value));
         for arm in &m.arms {
+            self.flush_leading(arm.span.start, &format!("{}\t", tabs));
             self.emit_match_arm(arm, tabs, indent);
         }
         self.output.push_str(&format!("{}}}\n", tabs));
@@ -340,6 +439,7 @@ impl GpFormatter {
                 };
                 self.output.push_str(&text);
                 self.output.push('\n');
+                self.flush_trailing(arm.span.end);
             }
             MatchArmBody::Block(block) => {
                 self.output.push_str("{\n");
@@ -377,22 +477,47 @@ impl GpFormatter {
 
     fn emit_raw(&mut self, decl: &RawDecl) {
         self.output.push_str(&decl.text);
+        // Verbatim source slice: drop any comments it already contains.
+        self.consume_within(decl.span.end);
     }
 }
 
-/// Returns `true` if `src` contains a `//` line comment or `/* */` block comment
-/// that is not inside a string or rune literal.
+fn item_span(item: &Item) -> &Span {
+    match item {
+        Item::Struct(d) => &d.span,
+        Item::Enum(d) => &d.span,
+        Item::Function(d) => &d.span,
+        Item::Impl(d) => &d.span,
+        Item::Raw(d) => &d.span,
+    }
+}
+
+fn stmt_span(stmt: &Stmt) -> &Span {
+    match stmt {
+        Stmt::VarDecl(s) => &s.span,
+        Stmt::Assign(s) => &s.span,
+        Stmt::Return(s) => &s.span,
+        Stmt::Defer(s)
+        | Stmt::Go(s)
+        | Stmt::For(s)
+        | Stmt::Switch(s)
+        | Stmt::Select(s)
+        | Stmt::Raw(s) => &s.span,
+        Stmt::Expr(s) => &s.span,
+        Stmt::Match(s) => &s.span,
+        Stmt::If(s) => &s.span,
+    }
+}
+
+/// Scan `src` for `//` line comments and `/* */` block comments that are not
+/// inside a string or rune literal, returning them in source order.
 ///
-/// The rewriting formatter reconstructs its output from the AST, and the lexer
-/// discards comments before they ever reach the AST, so reformatting a commented
-/// file in place would silently delete those comments. `fmt_file` uses this as a
-/// safety guard until the formatter preserves comments (see ROADMAP.md,
-/// "Comment-safe rewriting formatter"). The scan is string/rune-literal aware so
-/// that `//` inside a literal (e.g. a `"http://..."` URL) is not mistaken for a
-/// comment.
-pub fn source_has_comments(src: &str) -> bool {
+/// The scan is string/rune-literal aware so that `//` inside a literal (e.g. a
+/// `"http://..."` URL) is not mistaken for a comment.
+pub fn scan_comments(src: &str) -> Vec<Comment> {
     let bytes = src.as_bytes();
     let n = bytes.len();
+    let mut out = Vec::new();
     let mut i = 0;
     while i < n {
         match bytes[i] {
@@ -432,13 +557,54 @@ pub fn source_has_comments(src: &str) -> bool {
                     }
                 }
             }
-            b'/' if i + 1 < n && (bytes[i + 1] == b'/' || bytes[i + 1] == b'*') => {
-                return true;
+            b'/' if i + 1 < n && bytes[i + 1] == b'/' => {
+                let start = i;
+                while i < n && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                out.push(Comment {
+                    start,
+                    end: i,
+                    text: src[start..i].to_string(),
+                    is_line: true,
+                });
+            }
+            b'/' if i + 1 < n && bytes[i + 1] == b'*' => {
+                let start = i;
+                i += 2;
+                while i + 1 < n && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                // include the closing */
+                let end = (i + 2).min(n);
+                i = end;
+                out.push(Comment {
+                    start,
+                    end,
+                    text: src[start..end].to_string(),
+                    is_line: false,
+                });
             }
             _ => i += 1,
         }
     }
-    false
+    out
+}
+
+/// Returns `true` if `src` contains any comment outside string/rune literals.
+pub fn source_has_comments(src: &str) -> bool {
+    !scan_comments(src).is_empty()
+}
+
+/// The trimmed texts of all comments in `src`, sorted — used to check that a
+/// reformat preserved every comment (as a multiset) before overwriting a file.
+pub fn comment_texts(src: &str) -> Vec<String> {
+    let mut v: Vec<String> = scan_comments(src)
+        .into_iter()
+        .map(|c| c.text.trim().to_string())
+        .collect();
+    v.sort();
+    v
 }
 
 #[cfg(test)]
@@ -446,11 +612,15 @@ mod tests {
     use super::*;
     use crate::parser::parse_program;
 
+    fn format_source(input: &str) -> String {
+        let program = parse_program(input).expect("parse");
+        format_gp(&program, input)
+    }
+
     #[test]
     fn format_round_trip_simple() {
         let input = "package main\n\nimport \"fmt\"\n\nfn main() {\n\tfmt.Println(\"hello\")\n}\n";
-        let program = parse_program(input).expect("parse");
-        let formatted = format_gp(&program, input);
+        let formatted = format_source(input);
         assert!(formatted.contains("package main"));
         assert!(formatted.contains("import \"fmt\""));
         assert!(formatted.contains("fn main()"));
@@ -467,8 +637,7 @@ enum Status {
     Done
 }
 "#;
-        let program = parse_program(input).expect("parse");
-        let formatted = format_gp(&program, input);
+        let formatted = format_source(input);
         assert!(formatted.contains("@derive(String)"));
         assert!(formatted.contains("enum Status {"));
         assert!(formatted.contains("\tPending"));
@@ -486,52 +655,127 @@ fn readName() -> string! {
     return "goplus"
 }
 "#;
-        let program = parse_program(input).expect("parse");
-        let formatted = format_gp(&program, input);
+        let formatted = format_source(input);
         assert!(formatted.contains("@log"));
         assert!(formatted.contains("@retry(3, 100)"));
         assert!(formatted.contains("fn readName() -> string!"));
     }
 
+    // ---- comment preservation ----
+
     #[test]
-    fn detects_line_comment() {
-        assert!(source_has_comments("fn main() {\n\t// hi\n}\n"));
+    fn preserves_leading_comment_on_item() {
+        let input = "package main\n\n// greet builds a greeting\nfn greet() {\n}\n";
+        let formatted = format_source(input);
+        assert!(
+            formatted.contains("// greet builds a greeting"),
+            "leading comment lost:\n{formatted}"
+        );
+        assert!(comment_texts(input) == comment_texts(&formatted));
     }
 
     #[test]
-    fn detects_block_comment() {
-        assert!(source_has_comments("/* header */\npackage main\n"));
+    fn preserves_trailing_comment_on_stmt() {
+        let input = "package main\n\nfn main() {\n\tx := 1 // count\n}\n";
+        let formatted = format_source(input);
+        assert!(
+            formatted.contains("x := 1 // count"),
+            "trailing comment lost:\n{formatted}"
+        );
+        assert!(comment_texts(input) == comment_texts(&formatted));
     }
 
     #[test]
-    fn detects_trailing_comment() {
-        assert!(source_has_comments("x := 1 // count\n"));
+    fn preserves_field_comments() {
+        let input = "package main\n\nstruct Point {\n\t// the x coordinate\n\tx: int\n\ty: int // vertical\n}\n";
+        let formatted = format_source(input);
+        assert!(formatted.contains("// the x coordinate"), "{formatted}");
+        assert!(formatted.contains("y: int // vertical"), "{formatted}");
+        assert!(comment_texts(input) == comment_texts(&formatted));
     }
 
     #[test]
-    fn ignores_slashes_in_string_literal() {
-        assert!(!source_has_comments("url := \"http://example.com\"\n"));
+    fn preserves_url_in_string_not_treated_as_comment() {
+        let input = "package main\n\nfn main() {\n\turl := \"http://example.com\"\n}\n";
+        let formatted = format_source(input);
+        assert!(formatted.contains("http://example.com"));
+        assert!(comment_texts(&formatted).is_empty());
     }
 
     #[test]
-    fn ignores_slashes_in_raw_string() {
-        assert!(!source_has_comments("p := `a // b /* c */ d`\n"));
+    fn scan_finds_line_and_block_comments() {
+        let src = "a // one\n/* two */ b\n";
+        let cs = scan_comments(src);
+        assert_eq!(cs.len(), 2);
+        assert_eq!(cs[0].text, "// one");
+        assert!(cs[0].is_line);
+        assert_eq!(cs[1].text, "/* two */");
+        assert!(!cs[1].is_line);
     }
 
     #[test]
-    fn ignores_division_operator() {
-        assert!(!source_has_comments("y := a / b\n"));
+    fn scan_ignores_slashes_in_strings() {
+        assert!(scan_comments("u := \"a//b\"\n").is_empty());
+        assert!(scan_comments("p := `a // b /* c */`\n").is_empty());
     }
 
     #[test]
-    fn no_comments_in_plain_source() {
-        assert!(!source_has_comments(
-            "package main\n\nfn main() {\n\tx := 1\n}\n"
-        ));
+    fn source_has_comments_matches_scan() {
+        assert!(source_has_comments("x // y"));
+        assert!(!source_has_comments("x / y"));
     }
 
+    fn gp_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if path.file_name().and_then(|n| n.to_str()) == Some(".goplusgen") {
+                    continue;
+                }
+                gp_files(&path, out);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("gp") {
+                out.push(path);
+            }
+        }
+    }
+
+    /// Every example must format back to valid GoPlus that (a) keeps all its
+    /// comments and (b) is idempotent: `fmt(fmt(x)) == fmt(x)`. This is the
+    /// golden guard that keeps the rewriting formatter trustworthy.
     #[test]
-    fn detects_comment_after_string() {
-        assert!(source_has_comments("s := \"ok\" // done\n"));
+    fn examples_round_trip_and_preserve_comments() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples");
+        let mut files = Vec::new();
+        gp_files(&dir, &mut files);
+        assert!(
+            !files.is_empty(),
+            "no example .gp files found under {dir:?}"
+        );
+
+        let mut checked = 0;
+        for file in files {
+            let src = std::fs::read_to_string(&file).expect("read example");
+            let Ok(prog1) = parse_program(&src) else {
+                continue; // not parseable standalone; skip
+            };
+            let f1 = format_gp(&prog1, &src);
+
+            assert_eq!(
+                comment_texts(&src),
+                comment_texts(&f1),
+                "formatting changed the comment set for {file:?}"
+            );
+
+            let prog2 = parse_program(&f1).unwrap_or_else(|diags| {
+                panic!("reformatted output of {file:?} does not re-parse: {diags:?}\n---\n{f1}")
+            });
+            let f2 = format_gp(&prog2, &f1);
+            assert_eq!(f1, f2, "formatter is not idempotent for {file:?}");
+            checked += 1;
+        }
+        assert!(checked > 0, "no examples were round-trip checked");
     }
 }

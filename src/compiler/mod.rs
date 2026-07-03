@@ -11,7 +11,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use crate::{
     ast::{Item, Program},
     codegen::{
-        fmt::{format_gp, source_has_comments},
+        fmt::{comment_texts, format_gp},
         generate_go,
     },
     diag::Diagnostic,
@@ -164,20 +164,6 @@ pub fn fmt_file(path: &Path) -> Result<()> {
     let source_path = project::canonicalize_existing(path)?;
     let source = fs::read_to_string(&source_path)
         .with_context(|| format!("failed to read source file {}", source_path.display()))?;
-    // Safety guard: the rewriting formatter rebuilds files from the AST and the
-    // lexer discards comments, so an in-place format would silently delete them.
-    // Refuse to overwrite files that contain comments until the formatter is
-    // comment-safe (see ROADMAP.md). `--check` and `--stdout` remain available.
-    if source_has_comments(&source) {
-        bail!(
-            "refusing to reformat {} in place: `goplus fmt` is not comment-safe yet and would \
-             delete the comments in this file.\n  \
-             Use `goplus fmt --check` to verify formatting, or `goplus fmt --stdout` to preview \
-             the reformatted output without overwriting.\n  \
-             Comment-preserving formatting is tracked in ROADMAP.md.",
-            source_path.display()
-        );
-    }
     let program = parse_program(&source).map_err(|diags| {
         let items = vec![UnitDiagnostics {
             path: source_path.clone(),
@@ -187,6 +173,20 @@ pub fn fmt_file(path: &Path) -> Result<()> {
         anyhow!(diagnostics::render_unit_diagnostics(&items))
     })?;
     let formatted = format_gp(&program, &source);
+    // Safety net: the rewriting formatter reattaches comments best-effort. Only
+    // overwrite the file if every comment survived (compared as a multiset), so
+    // `goplus fmt` can never silently delete comments. `--check`/`--stdout` are
+    // unaffected. See ROADMAP.md, "Comment-safe rewriting formatter".
+    if comment_texts(&source) != comment_texts(&formatted) {
+        bail!(
+            "refusing to reformat {}: `goplus fmt` could not preserve every comment in this \
+             file, so it was left unchanged.\n  \
+             Use `goplus fmt --stdout` to preview the output, or `goplus fmt --check` to verify \
+             formatting.\n  \
+             Comment handling is tracked in ROADMAP.md.",
+            source_path.display()
+        );
+    }
     if formatted == source {
         println!("already formatted {}", source_path.display());
     } else {
