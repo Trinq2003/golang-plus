@@ -159,11 +159,18 @@ fn collect_block_idents(block: &Block, texts: &mut HashSet<String>) {
                 }
                 collect_block_idents(&for_stmt.body, texts);
             }
-            Stmt::Defer(raw)
-            | Stmt::Go(raw)
-            | Stmt::Switch(raw)
-            | Stmt::Select(raw)
-            | Stmt::Raw(raw) => {
+            Stmt::Switch(switch_stmt) => {
+                for word in switch_stmt.header.split_whitespace() {
+                    texts.insert(word.to_string());
+                }
+                for case in &switch_stmt.cases {
+                    for word in case.label.split_whitespace() {
+                        texts.insert(word.to_string());
+                    }
+                    collect_block_idents(&case.body, texts);
+                }
+            }
+            Stmt::Defer(raw) | Stmt::Go(raw) | Stmt::Select(raw) | Stmt::Raw(raw) => {
                 for word in raw.text.split_whitespace() {
                     texts.insert(word.to_string());
                 }

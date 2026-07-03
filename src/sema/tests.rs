@@ -89,6 +89,37 @@ fn scan(s: Status) {
 }
 
 #[test]
+fn checks_match_exhaustiveness_inside_switch() {
+    let src = r#"
+package main
+
+enum Status {
+    Pending
+    Running
+    Done
+}
+
+fn scan(n: int, s: Status) {
+    switch n {
+    case 1:
+        match s {
+            Status::Pending => {}
+            Status::Running => {}
+        }
+    }
+}
+"#;
+    let mut program = parse_program(src).expect("parse ok");
+    // The switch case body is now a real block, so the nested non-exhaustive
+    // match (missing `Done`) is analyzed instead of being opaque raw text.
+    let result = analyze(&mut program);
+    assert!(
+        result.is_err(),
+        "non-exhaustive match nested in a switch case must be caught"
+    );
+}
+
+#[test]
 fn rejects_memoize_with_slice_param() {
     let src = r#"
 package main

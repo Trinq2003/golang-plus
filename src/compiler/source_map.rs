@@ -257,7 +257,21 @@ impl<'a> SourceMapBuilder<'a> {
                 self.map_block(source, &for_stmt.body, next.unwrap_or(cursor));
                 next
             }
-            Stmt::Switch(raw) => self.map_raw_stmt(source, raw, "switch", cursor),
+            Stmt::Switch(switch_stmt) => {
+                let next = self.map_named_from(
+                    source,
+                    switch_stmt.span.clone(),
+                    "statement",
+                    "switch",
+                    "switch",
+                    cursor,
+                );
+                let inner = next.unwrap_or(cursor);
+                for case in &switch_stmt.cases {
+                    self.map_block(source, &case.body, inner);
+                }
+                next
+            }
             Stmt::Select(raw) => self.map_raw_stmt(source, raw, "select", cursor),
             Stmt::Raw(raw) => self.map_raw_stmt(source, raw, "raw", cursor),
         }

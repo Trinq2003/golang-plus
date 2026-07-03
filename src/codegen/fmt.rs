@@ -358,11 +358,7 @@ impl<'a> GpFormatter<'a> {
                         .push_str(&format!("{}return {}\n", tabs, exprs.join(", ")));
                 }
             }
-            Stmt::Defer(raw)
-            | Stmt::Go(raw)
-            | Stmt::Switch(raw)
-            | Stmt::Select(raw)
-            | Stmt::Raw(raw) => {
+            Stmt::Defer(raw) | Stmt::Go(raw) | Stmt::Select(raw) | Stmt::Raw(raw) => {
                 self.output.push_str(&format!("{}{}\n", tabs, raw.text));
                 // The raw text is a verbatim source slice that already contains
                 // any comments inside it; drop them from the pending list so they
@@ -380,6 +376,26 @@ impl<'a> GpFormatter<'a> {
                 // of `hdr`; drop it from the pending list.
                 self.consume_within(for_stmt.body.span.start);
                 self.emit_block(&for_stmt.body, indent + 1);
+                self.output.push_str(&format!("{}}}\n", tabs));
+            }
+            Stmt::Switch(switch_stmt) => {
+                let hdr = if switch_stmt.header.is_empty() {
+                    String::new()
+                } else {
+                    format!("{} ", switch_stmt.header)
+                };
+                self.output.push_str(&format!("{}switch {}{{\n", tabs, hdr));
+                // Header comments are already verbatim in `hdr`.
+                self.consume_within(switch_stmt.header_span.end);
+                for case in &switch_stmt.cases {
+                    self.flush_leading(case.label_span.start, tabs);
+                    self.output.push_str(&format!("{}{}\n", tabs, case.label));
+                    // A comment inside the label is already verbatim in it.
+                    self.consume_within(case.label_span.end);
+                    self.flush_trailing(case.label_span.end);
+                    self.emit_block(&case.body, indent + 1);
+                }
+                self.flush_leading(switch_stmt.span.end.saturating_sub(1), tabs);
                 self.output.push_str(&format!("{}}}\n", tabs));
             }
             Stmt::Expr(e) => {
@@ -509,8 +525,9 @@ fn stmt_span(stmt: &Stmt) -> &Span {
         Stmt::VarDecl(s) => &s.span,
         Stmt::Assign(s) => &s.span,
         Stmt::Return(s) => &s.span,
-        Stmt::Defer(s) | Stmt::Go(s) | Stmt::Switch(s) | Stmt::Select(s) | Stmt::Raw(s) => &s.span,
+        Stmt::Defer(s) | Stmt::Go(s) | Stmt::Select(s) | Stmt::Raw(s) => &s.span,
         Stmt::For(s) => &s.span,
+        Stmt::Switch(s) => &s.span,
         Stmt::Expr(s) => &s.span,
         Stmt::Match(s) => &s.span,
         Stmt::If(s) => &s.span,

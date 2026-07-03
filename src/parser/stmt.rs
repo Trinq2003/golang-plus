@@ -43,7 +43,7 @@ impl<'a> Parser<'a> {
             return self.parse_for_stmt();
         }
         if self.at(TokenKind::Switch) {
-            return self.parse_raw_stmt().map(Stmt::Switch);
+            return self.parse_switch_stmt();
         }
         if self.at(TokenKind::Select) {
             return self.parse_raw_stmt().map(Stmt::Select);
@@ -256,27 +256,7 @@ impl<'a> Parser<'a> {
 
         // Find the body-opening `{` at paren/bracket depth 0, so composite
         // literals in the header (e.g. `for x < len(T{}) {`) don't confuse it.
-        let mut paren = 0usize;
-        let mut bracket = 0usize;
-        let mut brace_idx = None;
-        let mut j = self.idx;
-        while j < self.tokens.len() {
-            match self.tokens[j].kind {
-                TokenKind::LParen => paren += 1,
-                TokenKind::RParen => paren = paren.saturating_sub(1),
-                TokenKind::LBracket => bracket += 1,
-                TokenKind::RBracket => bracket = bracket.saturating_sub(1),
-                TokenKind::LBrace if paren == 0 && bracket == 0 => {
-                    brace_idx = Some(j);
-                    break;
-                }
-                TokenKind::RBrace if paren == 0 && bracket == 0 => break,
-                _ => {}
-            }
-            j += 1;
-        }
-
-        let Some(brace_idx) = brace_idx else {
+        let Some(brace_idx) = self.find_body_brace(self.idx) else {
             // No body brace: fall back to the old raw pass-through behavior.
             self.idx = saved;
             return self.parse_raw_stmt().map(Stmt::Raw);
@@ -300,6 +280,153 @@ impl<'a> Parser<'a> {
             body,
             span: start..end,
         }))
+    }
+
+    /// Parse a `switch` with a raw header and structured `case`/`default`
+    /// clauses. Falls back to a raw statement on any unexpected shape.
+    pub(super) fn parse_switch_stmt(&mut self) -> Option<Stmt> {
+        let saved = self.idx;
+        let start = self
+            .expect_token(TokenKind::Switch, "expected `switch`")?
+            .span
+            .start;
+
+        let Some(brace_idx) = self.find_body_brace(self.idx) else {
+            self.idx = saved;
+            return self.parse_raw_stmt().map(Stmt::Raw);
+        };
+
+        let header_start = self.tokens[self.idx].span.start;
+        let header_end = self.tokens[brace_idx].span.start;
+        let header = if header_start < header_end {
+            self.source[header_start..header_end].trim().to_string()
+        } else {
+            String::new()
+        };
+        let header_span = header_start..header_end;
+
+        self.idx = brace_idx;
+        self.expect(TokenKind::LBrace, "expected `{` to start switch body");
+        self.skip_separators();
+
+        let mut cases = Vec::new();
+        while !self.at(TokenKind::RBrace) && !self.is_eof() {
+            if !self.at_case_or_default() {
+                // Unexpected token where a clause was expected: bail to raw.
+                self.idx = saved;
+                return self.parse_raw_stmt().map(Stmt::Raw);
+            }
+            let case_start = self.tokens[self.idx].span.start;
+            let Some(colon_idx) = self.find_clause_colon(self.idx) else {
+                self.idx = saved;
+                return self.parse_raw_stmt().map(Stmt::Raw);
+            };
+            let label_end = self.tokens[colon_idx].span.end;
+            let label = self.source[case_start..label_end].trim().to_string();
+            let label_span = case_start..label_end;
+            self.idx = colon_idx + 1;
+            self.skip_separators();
+
+            let body = self.parse_case_body();
+            let case_end = body.span.end.max(label_end);
+            cases.push(SwitchCase {
+                label,
+                label_span,
+                body,
+                span: case_start..case_end,
+            });
+            self.skip_separators();
+        }
+
+        let rb = self.expect_token(TokenKind::RBrace, "expected `}` to end switch body");
+        let end = rb.map(|t| t.span.end).unwrap_or(start);
+        Some(Stmt::Switch(SwitchStmt {
+            header,
+            header_span,
+            cases,
+            span: start..end,
+        }))
+    }
+
+    /// Parse the statements of one `case`/`default` clause, stopping at the next
+    /// `case`/`default` or the closing `}` of the switch body.
+    fn parse_case_body(&mut self) -> Block {
+        self.skip_separators();
+        let start = self.current_span().start;
+        let mut stmts = Vec::new();
+        while !self.at(TokenKind::RBrace) && !self.is_eof() && !self.at_case_or_default() {
+            if let Some(stmt) = self.parse_stmt() {
+                stmts.push(stmt);
+            } else {
+                self.synchronize_block();
+            }
+            self.skip_separators();
+        }
+        let end = self.previous_end().unwrap_or(start);
+        Block {
+            stmts,
+            span: start..end,
+        }
+    }
+
+    /// Locate the body-opening `{` at paren/bracket depth 0 starting at `from`.
+    /// Returns `None` if a top-level `}` is reached first (no body).
+    pub(super) fn find_body_brace(&self, from: usize) -> Option<usize> {
+        let mut paren = 0usize;
+        let mut bracket = 0usize;
+        let mut j = from;
+        while j < self.tokens.len() {
+            match self.tokens[j].kind {
+                TokenKind::LParen => paren += 1,
+                TokenKind::RParen => paren = paren.saturating_sub(1),
+                TokenKind::LBracket => bracket += 1,
+                TokenKind::RBracket => bracket = bracket.saturating_sub(1),
+                TokenKind::LBrace if paren == 0 && bracket == 0 => return Some(j),
+                TokenKind::RBrace if paren == 0 && bracket == 0 => return None,
+                _ => {}
+            }
+            j += 1;
+        }
+        None
+    }
+
+    /// Locate the `:` that terminates a `case`/`default` clause label, at
+    /// paren/bracket/brace depth 0 (so a `:` inside `a[1:2]` or `T{k: v}` and a
+    /// `::` enum path are not mistaken for it).
+    fn find_clause_colon(&self, from: usize) -> Option<usize> {
+        let mut paren = 0usize;
+        let mut bracket = 0usize;
+        let mut brace = 0usize;
+        let mut j = from;
+        while j < self.tokens.len() {
+            match self.tokens[j].kind {
+                TokenKind::LParen => paren += 1,
+                TokenKind::RParen => paren = paren.saturating_sub(1),
+                TokenKind::LBracket => bracket += 1,
+                TokenKind::RBracket => bracket = bracket.saturating_sub(1),
+                TokenKind::LBrace => brace += 1,
+                TokenKind::RBrace => {
+                    if brace == 0 {
+                        return None;
+                    }
+                    brace -= 1;
+                }
+                TokenKind::Colon if paren == 0 && bracket == 0 && brace == 0 => return Some(j),
+                _ => {}
+            }
+            j += 1;
+        }
+        None
+    }
+
+    /// True if the current token is the `case` or `default` keyword (both lex as
+    /// identifiers, since the lexer has no dedicated tokens for them).
+    fn at_case_or_default(&self) -> bool {
+        if !self.at(TokenKind::Ident) {
+            return false;
+        }
+        let text = &self.source[self.tokens[self.idx].span.clone()];
+        text == "case" || text == "default"
     }
 
     pub(super) fn parse_raw_stmt(&mut self) -> Option<RawStmt> {
