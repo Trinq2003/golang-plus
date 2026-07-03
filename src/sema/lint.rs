@@ -13,10 +13,155 @@ pub fn lint_program(program: &Program, model: &SemanticModel) -> Vec<Diagnostic>
     lint_naming_conventions(program, &mut diagnostics);
     lint_empty_function_bodies(program, &mut diagnostics);
     lint_redundant_return(program, &mut diagnostics);
+    lint_unreachable_match_arms(program, &mut diagnostics);
     lint_large_functions(program, &mut diagnostics);
     lint_missing_string_derive(program, model, &mut diagnostics);
+    lint_wildcard_enum_match(program, model, &mut diagnostics);
 
     diagnostics
+}
+
+/// Visit every function/method body block in the program.
+fn each_function_body(program: &Program, mut visit: impl FnMut(&Block)) {
+    for item in &program.items {
+        match item {
+            Item::Function(f) => visit(&f.body),
+            Item::Impl(impl_block) => {
+                for method in &impl_block.methods {
+                    visit(&method.body);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Visit every `match` statement in a block, recursing into all nested blocks
+/// (if/else, match arms, and the now-structured for/switch/select bodies).
+fn for_each_match(block: &Block, visit: &mut impl FnMut(&MatchStmt)) {
+    for stmt in &block.stmts {
+        match stmt {
+            Stmt::Match(m) => {
+                visit(m);
+                for arm in &m.arms {
+                    if let MatchArmBody::Block(b) = &arm.body {
+                        for_each_match(b, visit);
+                    }
+                }
+            }
+            Stmt::If(i) => {
+                for_each_match(&i.then_block, visit);
+                if let Some(else_branch) = &i.else_branch {
+                    match else_branch {
+                        ElseBranch::Block(b) => for_each_match(b, visit),
+                        ElseBranch::If(nested) => for_each_match(
+                            &Block {
+                                stmts: vec![Stmt::If((**nested).clone())],
+                                span: nested.span.clone(),
+                            },
+                            visit,
+                        ),
+                    }
+                }
+            }
+            Stmt::For(for_stmt) => for_each_match(&for_stmt.body, visit),
+            Stmt::Switch(switch_stmt) => {
+                for case in &switch_stmt.cases {
+                    for_each_match(&case.body, visit);
+                }
+            }
+            Stmt::Select(select_stmt) => {
+                for case in &select_stmt.cases {
+                    for_each_match(&case.body, visit);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// L0005: A `_` wildcard that is not the last arm makes the following arms
+/// unreachable.
+fn lint_unreachable_match_arms(program: &Program, diagnostics: &mut Vec<Diagnostic>) {
+    each_function_body(program, |body| {
+        for_each_match(body, &mut |m| {
+            let Some(wildcard_idx) = m
+                .arms
+                .iter()
+                .position(|arm| matches!(arm.pattern, Pattern::Wildcard { .. }))
+            else {
+                return;
+            };
+            if wildcard_idx + 1 < m.arms.len() {
+                let dead = &m.arms[wildcard_idx + 1];
+                diagnostics.push(
+                    Diagnostic::warning(
+                        "match arm after a `_` wildcard is unreachable",
+                        Some(dead.span.clone()),
+                    )
+                    .with_code("L0005")
+                    .with_hint("move the `_` arm last, or remove the unreachable arm(s)")
+                    .with_severity(DiagnosticSeverity::Warning),
+                );
+            }
+        });
+    });
+}
+
+/// L0008: A `_` wildcard on an enum `match` that hides unlisted variants defeats
+/// exhaustiveness checking — adding a new variant later will be silently absorbed
+/// by the wildcard instead of flagged.
+fn lint_wildcard_enum_match(
+    program: &Program,
+    model: &SemanticModel,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    each_function_body(program, |body| {
+        for_each_match(body, &mut |m| {
+            let Some(enum_name) = &m.resolved_enum else {
+                return;
+            };
+            let Some(enum_decl) = model.enums.get(enum_name) else {
+                return;
+            };
+            if !m
+                .arms
+                .iter()
+                .any(|arm| matches!(arm.pattern, Pattern::Wildcard { .. }))
+            {
+                return;
+            }
+            let covered: HashSet<&str> = m
+                .arms
+                .iter()
+                .filter_map(|arm| arm.pattern.variant_name())
+                .collect();
+            let unlisted: Vec<&str> = enum_decl
+                .variants
+                .iter()
+                .map(|v| v.name.as_str())
+                .filter(|name| !covered.contains(name))
+                .collect();
+            if !unlisted.is_empty() {
+                diagnostics.push(
+                    Diagnostic::warning(
+                        format!(
+                            "`_` in this match on enum `{}` hides {} unlisted variant(s): {}",
+                            enum_name,
+                            unlisted.len(),
+                            unlisted.join(", ")
+                        ),
+                        Some(m.span.clone()),
+                    )
+                    .with_code("L0008")
+                    .with_hint(
+                        "list the variants explicitly so exhaustiveness checking catches new ones",
+                    )
+                    .with_severity(DiagnosticSeverity::Warning),
+                );
+            }
+        });
+    });
 }
 
 /// L0001: Unused imports — imported but never referenced in source items.
@@ -381,5 +526,41 @@ mod tests {
         for w in &warnings {
             assert_eq!(w.severity, DiagnosticSeverity::Warning);
         }
+    }
+
+    #[test]
+    fn lint_detects_unreachable_arm_after_wildcard() {
+        let warnings = lint_source(
+            "package main\n\nfn f(n: int) -> int {\n\tmatch n {\n\t\t_ => 0,\n\t\t1 => 1,\n\t}\n}\n",
+        );
+        assert!(warnings.iter().any(|d| d.code == "L0005"));
+    }
+
+    #[test]
+    fn lint_detects_wildcard_hiding_enum_variants() {
+        let warnings = lint_source(
+            "package main\n\nenum Status {\n\tA\n\tB\n\tC\n}\n\nfn label(s: Status) -> int {\n\tmatch s {\n\t\tStatus::A => 1,\n\t\t_ => 0,\n\t}\n}\n",
+        );
+        let l0008 = warnings.iter().find(|d| d.code == "L0008").expect("L0008");
+        assert!(l0008.message.contains("B"));
+        assert!(l0008.message.contains("C"));
+    }
+
+    #[test]
+    fn lint_no_wildcard_warning_when_enum_match_is_exhaustive() {
+        let warnings = lint_source(
+            "package main\n\nenum Status {\n\tA\n\tB\n}\n\nfn label(s: Status) -> int {\n\tmatch s {\n\t\tStatus::A => 1,\n\t\tStatus::B => 2,\n\t}\n}\n",
+        );
+        assert!(warnings.iter().all(|d| d.code != "L0008"));
+    }
+
+    #[test]
+    fn lint_finds_match_nested_in_for() {
+        // Regression for Phase 2: matches nested in structured for/switch bodies
+        // are now reachable by lint rules.
+        let warnings = lint_source(
+            "package main\n\nfn f(n: int) -> int {\n\tfor true {\n\t\tmatch n {\n\t\t\t_ => 0,\n\t\t\t1 => 1,\n\t\t}\n\t}\n\treturn 0\n}\n",
+        );
+        assert!(warnings.iter().any(|d| d.code == "L0005"));
     }
 }
