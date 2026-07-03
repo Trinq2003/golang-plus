@@ -76,3 +76,7 @@ jobs:
       run: |
         cargo run -- build examples/link-source/main.gp --out-dir .goplusgen --out ./goplus-link-source
         cargo run -- build examples/complex-app/main.gp --out-dir .goplusgen --out ./goplus-complex-app
+    - name: REST API case study (demo + handler tests)
+      run: |
+        cargo run -- run examples/rest-api-demo/main.gp --out-dir .goplusgen
+        cargo run -- test examples/rest-api-demo/main.gp --out-dir .goplusgen
