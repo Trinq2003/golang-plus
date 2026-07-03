@@ -379,10 +379,10 @@ pub(super) fn find_type_segment_end(input: &str, start: usize) -> usize {
             b'}' => brace = brace.saturating_sub(1),
             b'<' => angle += 1,
             b'>' => angle = angle.saturating_sub(1),
-            b',' | b';' | b'\n' | b'\r' => {
-                if paren == 0 && bracket == 0 && brace == 0 && angle == 0 {
-                    break;
-                }
+            b',' | b';' | b'\n' | b'\r'
+                if paren == 0 && bracket == 0 && brace == 0 && angle == 0 =>
+            {
+                break;
             }
             _ => {}
         }

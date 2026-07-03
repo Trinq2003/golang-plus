@@ -14,7 +14,7 @@ To develop the GoPlus compiler, you will need:
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/hotamago/golang-plus.git
+   git clone https://github.com/Trinq2003/golang-plus.git
    cd golang-plus
    ```
 
@@ -45,7 +45,7 @@ To develop the GoPlus compiler, you will need:
 
 ## Good First Issues and Help Wanted
 
-If you're new to the project and looking for a place to start, check out the issues labeled [`good first issue`](https://github.com/hotamago/golang-plus/labels/good%20first%20issue) or [`help wanted`](https://github.com/hotamago/golang-plus/labels/help%20wanted). These labels are used to highlight tasks that are specifically suited for new contributors. They are typically smaller in scope, well-documented, and an excellent way to get familiar with the codebase.
+If you're new to the project and looking for a place to start, check out the issues labeled [`good first issue`](https://github.com/Trinq2003/golang-plus/labels/good%20first%20issue) or [`help wanted`](https://github.com/Trinq2003/golang-plus/labels/help%20wanted). These labels are used to highlight tasks that are specifically suited for new contributors. They are typically smaller in scope, well-documented, and an excellent way to get familiar with the codebase.
 
 ## Code of Conduct
 

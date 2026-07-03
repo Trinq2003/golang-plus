@@ -10,7 +10,10 @@ use anyhow::{Context, Result, anyhow, bail};
 
 use crate::{
     ast::{Item, Program},
-    codegen::{fmt::format_gp, generate_go},
+    codegen::{
+        fmt::{format_gp, source_has_comments},
+        generate_go,
+    },
     diag::Diagnostic,
     parser::parse_program,
     sema::{SemanticModel, analyze_with_model, build_model, lint::lint_program},
@@ -161,6 +164,20 @@ pub fn fmt_file(path: &Path) -> Result<()> {
     let source_path = project::canonicalize_existing(path)?;
     let source = fs::read_to_string(&source_path)
         .with_context(|| format!("failed to read source file {}", source_path.display()))?;
+    // Safety guard: the rewriting formatter rebuilds files from the AST and the
+    // lexer discards comments, so an in-place format would silently delete them.
+    // Refuse to overwrite files that contain comments until the formatter is
+    // comment-safe (see ROADMAP.md). `--check` and `--stdout` remain available.
+    if source_has_comments(&source) {
+        bail!(
+            "refusing to reformat {} in place: `goplus fmt` is not comment-safe yet and would \
+             delete the comments in this file.\n  \
+             Use `goplus fmt --check` to verify formatting, or `goplus fmt --stdout` to preview \
+             the reformatted output without overwriting.\n  \
+             Comment-preserving formatting is tracked in ROADMAP.md.",
+            source_path.display()
+        );
+    }
     let program = parse_program(&source).map_err(|diags| {
         let items = vec![UnitDiagnostics {
             path: source_path.clone(),

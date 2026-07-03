@@ -4,7 +4,7 @@ version = "0.2.1"
 edition = "2024"
 description = "GoPlus: A modern, powerful language toolchain"
 license = "MIT"
-repository = "https://github.com/hotamago/golang-plus"
+repository = "https://github.com/Trinq2003/golang-plus"
 authors = ["GoPlus Contributors"]
 
 [dependencies]
