@@ -171,29 +171,29 @@ fn collect_block_idents(block: &Block, texts: &mut HashSet<String>) {
 fn lint_naming_conventions(program: &Program, diagnostics: &mut Vec<Diagnostic>) {
     for item in &program.items {
         match item {
-            Item::Struct(s) => {
-                if !s.name.is_empty() && !s.name.chars().next().unwrap().is_uppercase() {
-                    diagnostics.push(
-                        Diagnostic::warning(
-                            format!("struct `{}` should use PascalCase naming", s.name),
-                            Some(s.span.clone()),
-                        )
-                        .with_code("L0002")
-                        .with_severity(DiagnosticSeverity::Warning),
-                    );
-                }
+            Item::Struct(s)
+                if !s.name.is_empty() && !s.name.chars().next().unwrap().is_uppercase() =>
+            {
+                diagnostics.push(
+                    Diagnostic::warning(
+                        format!("struct `{}` should use PascalCase naming", s.name),
+                        Some(s.span.clone()),
+                    )
+                    .with_code("L0002")
+                    .with_severity(DiagnosticSeverity::Warning),
+                );
             }
-            Item::Enum(e) => {
-                if !e.name.is_empty() && !e.name.chars().next().unwrap().is_uppercase() {
-                    diagnostics.push(
-                        Diagnostic::warning(
-                            format!("enum `{}` should use PascalCase naming", e.name),
-                            Some(e.span.clone()),
-                        )
-                        .with_code("L0002")
-                        .with_severity(DiagnosticSeverity::Warning),
-                    );
-                }
+            Item::Enum(e)
+                if !e.name.is_empty() && !e.name.chars().next().unwrap().is_uppercase() =>
+            {
+                diagnostics.push(
+                    Diagnostic::warning(
+                        format!("enum `{}` should use PascalCase naming", e.name),
+                        Some(e.span.clone()),
+                    )
+                    .with_code("L0002")
+                    .with_severity(DiagnosticSeverity::Warning),
+                );
             }
             _ => {}
         }

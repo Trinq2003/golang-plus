@@ -43,7 +43,7 @@ Long-term vision:
 
 ## Quick Start
 
-First, download and install `goplus` from the [Releases](https://github.com/hotamago/golang-plus/releases) page (Windows users can use the `.msi` installer). Then run:
+First, download and install `goplus` from the [Releases](https://github.com/Trinq2003/golang-plus/releases) page (Windows users can use the `.msi` installer). Then run:
 
 ```bash
 goplus check examples/demo.gp
@@ -157,7 +157,7 @@ GoPlus provides a native-like development experience in VSCode, powered by the `
 The extension requires the `goplus` CLI to be available in your system `$PATH` (or `%PATH%` on Windows).
 
 1. **Install CLI**:
-   - **Windows**: Download the `.msi` installer from the [Releases](https://github.com/hotamago/golang-plus/releases) page and run it. The installer will automatically add `goplus` to your system `$PATH`!
+   - **Windows**: Download the `.msi` installer from the [Releases](https://github.com/Trinq2003/golang-plus/releases) page and run it. The installer will automatically add `goplus` to your system `$PATH`!
    - **Other OS / From Source**:
      ```bash
      cargo install --path .
@@ -168,7 +168,7 @@ The extension requires the `goplus` CLI to be available in your system `$PATH` (
    - Run `npm install` and `npm run package` (requires `vsce`) to build the extension, or use the pre-built `.vsix` file in the directory.
    - Install the generated `.vsix` file in VSCode (`Extensions: Install from VSIX...` from the command palette).
 
-## Current Status (v1)
+## Language & CLI Features
 
 - Syntax: `fn` (and standard Go `func`), `struct`, `enum` (simple + tagged generic), `impl`.
 - Error sugar: `-> T!`, `-> !`, `expr?`.
@@ -193,24 +193,28 @@ The extension requires the `goplus` CLI to be available in your system `$PATH` (
 
 ## v2 Tooling & DevEx
 
-The compiler is now organized into scalable frontend, semantic, codegen, and
+The compiler is organized into scalable frontend, semantic, codegen, and
 project orchestration submodules under `src/parser`, `src/sema`, `src/codegen`,
-and `src/compiler`. No core module is intended to grow into a thousand-line
-catch-all file again.
+and `src/compiler`.
 
-With the completion of v2, the ecosystem now features production-grade tooling:
-- **IDE Diagnostics**: Diagnostics include severity levels (`Error`, `Warning`, `Info`), codes, precise caret spans, and hints. Available via `goplus check --diagnostic-format json`.
-- **Rewriting Formatter**: `goplus fmt` deterministically reformats `.gp` sources.
-- **Linter**: `goplus lint` catches stylistic issues and suspicious code without compiling to Go.
-- **Source Navigation**: `goplus navigate` and generated source maps enable bidirectional lookups (`.gp` ↔ `.go`).
-- **Topological Builds**: The package graph uses Kahn's algorithm to resolve dependencies, transpile in topological order, and catch cycles early.
-- **Strong Decorator Validation**: Full callable signature analysis ensures custom decorators perfectly match their targets.
+Tooling that exists today (see [ROADMAP.md](ROADMAP.md) for exact status and known gaps):
+- **IDE Diagnostics**: severity levels (`Error`, `Warning`, `Info`), codes, precise caret spans, and hints via `goplus check --diagnostic-format json`.
+- **Formatter**: `goplus fmt --check`, in-place `goplus fmt`, and `goplus fmt --stdout`. ⚠️ The rewriting formatter is **not comment-safe yet** — write mode rebuilds files from the AST and would delete comments, so it currently refuses to overwrite any file that contains comments. Making comments survive is the top in-progress item.
+- **Linter**: `goplus lint` reports stylistic/suspicious-code rules on the analyzed AST without compiling to Go.
+- **Source Navigation**: `goplus navigate` and emitted source maps resolve `.gp` ↔ `.go` in both directions.
+- **Topological Builds**: the package graph uses Kahn's algorithm to order transpilation and catch cycles early, with content-hash caching of unchanged packages.
+- **Decorator Validation**: custom decorators referencing a local top-level function are checked for arity and `next` param-count/return-shape compatibility (heuristic). Method and package-qualified decorators are not yet signature-checked.
 
-## Roadmap
+## Roadmap & Status
 
-See [ROADMAP.md](ROADMAP.md) for the detailed source of truth.
+[ROADMAP.md](ROADMAP.md) is the **single source of truth** for per-feature status.
+This README intentionally does not restate feature status, so the two cannot drift.
 
-Short status:
-- v1.x stabilization is complete for the current syntax.
-- v2 tooling is **complete**. The tooling foundation is robust, featuring deterministic formatting, linting, source maps, topological build graphs, and strong decorator validation.
-- v3 VSCode Extension is **complete**. Install from `editors/vscode/` or the packaged `.vsix`.
+At a glance: the compiler frontend, package build graph, linter, source maps, and
+built-in derives (`String`, `Debug`, `Equal`, JSON) are in place. The two known
+gaps before the tooling is production-safe are (1) a **comment-safe formatter**
+and (2) **structured parsing of `for`/`switch`/`select` bodies** (they are raw
+pass-through today, so `match`/`if` nested inside them are not analyzed). The
+VSCode extension (`editors/vscode/`, `goplus-lang-0.2.0.vsix`) ships syntax
+highlighting, diagnostics, lint-on-save, inlay hints, snippets, hover, and
+command-based `.gp` ↔ `.go` navigation.

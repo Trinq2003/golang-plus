@@ -75,14 +75,14 @@ Hover on GoPlus-specific syntax for contextual documentation:
 
 ## Requirements
 
-- [GoPlus compiler](https://github.com/hotamago/golang-plus) installed and available on PATH (or configure `goplus.binaryPath`)
+- [GoPlus compiler](https://github.com/Trinq2003/golang-plus) installed and available on PATH (or configure `goplus.binaryPath`)
 - Go toolchain (for building generated code)
 
 ### Installing GoPlus
 
 ```bash
 # Build from source
-git clone https://github.com/hotamago/golang-plus.git
+git clone https://github.com/Trinq2003/golang-plus.git
 cd golang-plus
 cargo install --path .
 ```

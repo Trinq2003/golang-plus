@@ -380,6 +380,67 @@ impl GpFormatter {
     }
 }
 
+/// Returns `true` if `src` contains a `//` line comment or `/* */` block comment
+/// that is not inside a string or rune literal.
+///
+/// The rewriting formatter reconstructs its output from the AST, and the lexer
+/// discards comments before they ever reach the AST, so reformatting a commented
+/// file in place would silently delete those comments. `fmt_file` uses this as a
+/// safety guard until the formatter preserves comments (see ROADMAP.md,
+/// "Comment-safe rewriting formatter"). The scan is string/rune-literal aware so
+/// that `//` inside a literal (e.g. a `"http://..."` URL) is not mistaken for a
+/// comment.
+pub fn source_has_comments(src: &str) -> bool {
+    let bytes = src.as_bytes();
+    let n = bytes.len();
+    let mut i = 0;
+    while i < n {
+        match bytes[i] {
+            // interpreted string literal: skip to the closing quote, honoring escapes.
+            b'"' => {
+                i += 1;
+                while i < n {
+                    match bytes[i] {
+                        b'\\' => i += 2,
+                        b'"' => {
+                            i += 1;
+                            break;
+                        }
+                        _ => i += 1,
+                    }
+                }
+            }
+            // raw string literal: skip to the closing backtick (no escapes).
+            b'`' => {
+                i += 1;
+                while i < n && bytes[i] != b'`' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            // rune literal: skip to the closing quote, honoring escapes.
+            b'\'' => {
+                i += 1;
+                while i < n {
+                    match bytes[i] {
+                        b'\\' => i += 2,
+                        b'\'' => {
+                            i += 1;
+                            break;
+                        }
+                        _ => i += 1,
+                    }
+                }
+            }
+            b'/' if i + 1 < n && (bytes[i + 1] == b'/' || bytes[i + 1] == b'*') => {
+                return true;
+            }
+            _ => i += 1,
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -430,5 +491,47 @@ fn readName() -> string! {
         assert!(formatted.contains("@log"));
         assert!(formatted.contains("@retry(3, 100)"));
         assert!(formatted.contains("fn readName() -> string!"));
+    }
+
+    #[test]
+    fn detects_line_comment() {
+        assert!(source_has_comments("fn main() {\n\t// hi\n}\n"));
+    }
+
+    #[test]
+    fn detects_block_comment() {
+        assert!(source_has_comments("/* header */\npackage main\n"));
+    }
+
+    #[test]
+    fn detects_trailing_comment() {
+        assert!(source_has_comments("x := 1 // count\n"));
+    }
+
+    #[test]
+    fn ignores_slashes_in_string_literal() {
+        assert!(!source_has_comments("url := \"http://example.com\"\n"));
+    }
+
+    #[test]
+    fn ignores_slashes_in_raw_string() {
+        assert!(!source_has_comments("p := `a // b /* c */ d`\n"));
+    }
+
+    #[test]
+    fn ignores_division_operator() {
+        assert!(!source_has_comments("y := a / b\n"));
+    }
+
+    #[test]
+    fn no_comments_in_plain_source() {
+        assert!(!source_has_comments(
+            "package main\n\nfn main() {\n\tx := 1\n}\n"
+        ));
+    }
+
+    #[test]
+    fn detects_comment_after_string() {
+        assert!(source_has_comments("s := \"ok\" // done\n"));
     }
 }
