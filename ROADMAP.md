@@ -18,12 +18,14 @@ Status labels:
 GoPlus is an early compiler/transpiler for `.gp -> .go`. The frontend
 (lexer/parser/sema/codegen) and a package/project orchestration layer are in
 place, with a growing fixture suite. Most v2 tooling **exists and is wired to the
-CLI**, but two significant gaps remain before it can be called production-safe:
+CLI**. The main remaining frontend gap is:
 
-1. The **rewriting formatter deletes comments** (see below) — do not run
-   `goplus fmt` in write mode on files you care about yet.
-2. **`for` / `switch` / `select` bodies are raw pass-through**, so any
-   `match` / `if` nested inside them is not semantically analyzed or desugared.
+- **`for` / `switch` / `select` bodies are raw pass-through**, so any
+  `match` / `if` nested inside them is not semantically analyzed or desugared.
+
+The rewriting formatter now **preserves comments** and is round-trip/idempotency
+tested on every example; it refuses to overwrite a file only if a comment cannot
+be safely reattached (so it can never silently delete one).
 
 | Area | Status | Notes |
 | --- | --- | --- |
@@ -33,7 +35,7 @@ CLI**, but two significant gaps remain before it can be called production-safe:
 | Parser coverage | Partial | Structured for imports, `struct`/`enum`/`impl`/`fn`, `if`/`else`, `match`, `return`, `var :=`. `for`/`switch`/`select`/`defer`/`go`/assignment are raw pass-through (single `RawStmt`), so their bodies are not analyzed. |
 | Semantic checks | Done | Duplicate declarations, enum variant/name collisions, generated-name collisions, match arity/duplicates, and decorator checks — but only outside raw statement bodies. |
 | Source maps + navigation | Done | `--emit-source-map` writes JSON `.gp`↔`.go` ranges; `goplus navigate` resolves both directions. |
-| Formatter | Partial | `fmt --check`, in-place `fmt`, and `fmt --stdout` all exist and rebuild from the AST. **Not comment-safe: write mode deletes comments.** No golden/idempotency tests yet. A safety guard currently blocks in-place `fmt` on files that contain comments. |
+| Formatter | Done | `fmt --check`, in-place `fmt`, and `fmt --stdout` rebuild from the AST and **reattach comments**. In-place `fmt` overwrites only when every comment is preserved (multiset check), else it refuses. Round-trip/idempotency + comment-preservation are tested over all examples. |
 | Linter | Done | `goplus lint` ships 6 rules with stable codes; runs on the analyzed AST without generating Go. |
 | CI example coverage | Done | CI runs `goplus check` on every `.gp` example, runs executable examples, and builds selected example packages. |
 
@@ -50,7 +52,7 @@ performance-conscious without breaking existing `.gp` syntax.
 | Add complex integration examples | Done | `examples/complex-app` covers grouped imports, block comments, derive, impl, tagged enums, match, decorators, memoize, error sugar, and raw Go-like statements. |
 | Expand diagnostic precision | Done | Focused spans, stable codes, and hints cover parser recovery, decorator errors, match errors, and package/module errors. |
 | Complete real source map mappings | Done | `--emit-source-map` records useful `.gp` to generated `.go` ranges for functions, declarations, match arms, and statements. |
-| Add fixture/golden test matrix | Partial | Fixtures cover parser, diagnostics, generated Go, tagged enum edge cases, source maps, and build interop. **Formatter golden/idempotency fixtures are missing.** |
+| Add fixture/golden test matrix | Done | Fixtures cover parser, diagnostics, generated Go, tagged enum edge cases, source maps, build interop, and formatter round-trip/idempotency + comment preservation over all examples. |
 | Structure `for` / `switch` / `select` bodies | Planned | These are captured as a single `RawStmt` today. Goal: parse headers + bodies into real `Block`/case lists so nested `match`/`if` are analyzed and desugared at any depth. |
 | Structure assignments / `defer` / `go` | Planned | Currently raw line/`RawStmt` captures with no LHS/RHS breakdown. |
 | Make generic tagged enums build-clean | Done | Constructors and type references emit Go type arguments with `[...]`, not GoPlus `<...>` syntax. |
@@ -66,7 +68,7 @@ structured control flow, and test coverage.
 | Task | Status | Acceptance Criteria |
 | --- | --- | --- |
 | Formatter command shape | Done | `fmt --check`, in-place `fmt`, and `fmt --stdout` all exist. |
-| Comment-safe rewriting formatter | Planned | The formatter must preserve comments (lexer emits comment tokens, threaded through the AST) and have golden + idempotency (`fmt(fmt(x)) == fmt(x)`) tests. **This is the current top priority.** |
+| Comment-safe rewriting formatter | Done | The formatter reattaches comments (leading, trailing, verbatim in raw regions) by scanning the source and placing them against AST node spans; it verifies the comment multiset survived before overwriting. Golden idempotency (`fmt(fmt(x)) == fmt(x)`) + comment-preservation are tested over all examples. |
 | Linter | Done | `goplus lint` reports style/suspicious-code diagnostics without generating Go. Rules: `L0001` unused imports, `L0002` naming, `L0003` empty body, `L0004` redundant return, `L0006` large functions, `L0007` missing `@derive(String)`. (`L0005` is reserved/unallocated.) |
 | Linter rule expansion | Planned | Add rules for misordered decorators, `_` wildcard shadowing enum exhaustiveness, and `?` used outside an error-capable function. |
 | IDE diagnostics | Done | JSON diagnostics carry severity (`Error`/`Warning`/`Info`), codes, caret spans, and hints via `goplus check --diagnostic-format json`. |
@@ -121,9 +123,9 @@ broad benchmarking.
 
 Recommended order (highest value / highest risk first):
 
-1. **Comment-safe formatter** — the write-mode formatter currently deletes
-   comments; make comments survive lexing → AST → output, with golden +
-   idempotency tests.
+1. ~~Comment-safe formatter~~ — **done**: the formatter reattaches comments and
+   is round-trip/idempotency tested; in-place `fmt` refuses rather than drop a
+   comment.
 2. **Structure `for`/`switch`/`select` bodies** — so nested `match`/`if` are
    analyzed and desugared, and source maps reach inside them.
 3. Expand linter rules on the stabilized AST.

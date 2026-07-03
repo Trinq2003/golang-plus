@@ -199,7 +199,7 @@ and `src/compiler`.
 
 Tooling that exists today (see [ROADMAP.md](ROADMAP.md) for exact status and known gaps):
 - **IDE Diagnostics**: severity levels (`Error`, `Warning`, `Info`), codes, precise caret spans, and hints via `goplus check --diagnostic-format json`.
-- **Formatter**: `goplus fmt --check`, in-place `goplus fmt`, and `goplus fmt --stdout`. ⚠️ The rewriting formatter is **not comment-safe yet** — write mode rebuilds files from the AST and would delete comments, so it currently refuses to overwrite any file that contains comments. Making comments survive is the top in-progress item.
+- **Formatter**: `goplus fmt --check`, in-place `goplus fmt`, and `goplus fmt --stdout`. The rewriting formatter **preserves comments** (it reattaches them by span) and is round-trip/idempotency tested on every example; in-place mode overwrites only when every comment is safely preserved, otherwise it refuses (so it never silently deletes a comment).
 - **Linter**: `goplus lint` reports stylistic/suspicious-code rules on the analyzed AST without compiling to Go.
 - **Source Navigation**: `goplus navigate` and emitted source maps resolve `.gp` ↔ `.go` in both directions.
 - **Topological Builds**: the package graph uses Kahn's algorithm to order transpilation and catch cycles early, with content-hash caching of unchanged packages.
@@ -210,11 +210,11 @@ Tooling that exists today (see [ROADMAP.md](ROADMAP.md) for exact status and kno
 [ROADMAP.md](ROADMAP.md) is the **single source of truth** for per-feature status.
 This README intentionally does not restate feature status, so the two cannot drift.
 
-At a glance: the compiler frontend, package build graph, linter, source maps, and
-built-in derives (`String`, `Debug`, `Equal`, JSON) are in place. The two known
-gaps before the tooling is production-safe are (1) a **comment-safe formatter**
-and (2) **structured parsing of `for`/`switch`/`select` bodies** (they are raw
-pass-through today, so `match`/`if` nested inside them are not analyzed). The
+At a glance: the compiler frontend, package build graph, linter, source maps,
+built-in derives (`String`, `Debug`, `Equal`, JSON), and a comment-preserving
+formatter are in place. The main remaining frontend gap is **structured parsing
+of `for`/`switch`/`select` bodies** (they are raw pass-through today, so
+`match`/`if` nested inside them are not analyzed). The
 VSCode extension (`editors/vscode/`, `goplus-lang-0.2.0.vsix`) ships syntax
 highlighting, diagnostics, lint-on-save, inlay hints, snippets, hover, and
 command-based `.gp` ↔ `.go` navigation.
