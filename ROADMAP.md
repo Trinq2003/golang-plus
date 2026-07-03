@@ -119,8 +119,8 @@ broad benchmarking.
 | --- | --- | --- |
 | Single-source status (this file) | Done | README/docs link here instead of restating status. |
 | REST API case study | Done | `examples/rest-api-demo/` is a task-tracker REST service written entirely in `.gp` (HTTP + service + store + enum state machine + JSON), run in CI via `goplus test`. Building it surfaced and fixed two JSON-derive codegen bugs. |
-| Docs site (mdBook + GitHub Pages) | Planned | Published at `https://trinq2003.github.io/golang-plus/`, built in CI on merge to `main`. |
-| Doc-consistency CI check | Planned | CI fails if README restates a status that contradicts this table. |
+| Docs site (mdBook + GitHub Pages) | Done | `docs-site/` (mdBook) is built and deployed to `https://trinq2003.github.io/golang-plus/` by `.github/workflows/docs.yml` on merge to `main` (one-time setup: repo Settings → Pages → Source: GitHub Actions). It renders the language guide, ROADMAP, and BENCHMARKS via includes so they never drift. |
+| Doc-consistency CI check | Done | `scripts/check_docs.sh` runs in CI and fails if README stops deferring to ROADMAP for per-feature status. |
 
 ## Contribution Priorities
 

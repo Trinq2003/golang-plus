@@ -1,0 +1,16 @@
+[book]
+title = "GoPlus"
+authors = ["GoPlus Contributors"]
+description = "A surface language for Go, implemented as a Rust transpiler (.gp -> .go)."
+src = "src"
+language = "en"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/Trinq2003/golang-plus"
+edit-url-template = "https://github.com/Trinq2003/golang-plus/edit/main/docs-site/{path}"
+
+[output.html.fold]
+enable = true
+level = 1
